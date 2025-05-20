@@ -262,23 +262,36 @@ else:
         iade_df["siparis_tarihi"].apply(lambda d: d.strftime("%Y-%m") == donem if pd.notnull(d) else False)
     ]
 
-# 🔧 Sayısal kolonları
 sayisal_kolonlar = [
     "satir_fiyat",
-    "kar",
     "urun_toplam_maliyet",
     "satir_komisyon",
-    "satir_kargo_fiyat"  # ← doğru hali bu!
+    "satir_kargo_fiyat"
 ]
-for kolon in sayisal_kolonlar:
-    if kolon not in df_filtered.columns:
-        # Eğer kolon yoksa oluştur ve sıfırla
-        df_filtered[kolon] = 0.0
+
+def temizle_sayisal_kolon(df, kolon_adi):
+    if kolon_adi not in df.columns:
+        df[kolon_adi] = 0.0
     else:
-        # Varsa sayıya çevir
-        df_filtered[kolon] = pd.to_numeric(df_filtered[kolon], errors="coerce").fillna(0)
+        df[kolon_adi] = (
+            df[kolon_adi]
+            .astype(str)
+            .str.replace("₺", "", regex=False)
+            .str.replace(".", "", regex=False)
+            .str.replace(",", ".", regex=False)
+        )
+        df[kolon_adi] = pd.to_numeric(df[kolon_adi], errors="coerce").fillna(0)
+    return df
 
+for kolon in ["satir_fiyat", "urun_toplam_maliyet", "satir_komisyon", "satir_kargo_fiyat"]:
+    df_filtered = temizle_sayisal_kolon(df_filtered, kolon)
 
+df_filtered["kar"] = (
+    df_filtered["satir_fiyat"]
+    - df_filtered["urun_toplam_maliyet"]
+    - df_filtered["satir_komisyon"]
+    - df_filtered["satir_kargo_fiyat"]
+)
 
 # 3. Artık 'fatura_il' kolonu varsa düzenle
 if "fatura_il" in df_filtered.columns:
@@ -307,7 +320,15 @@ il_ozet = df_filtered.groupby("fatura_il").agg({
 # --------------------
 # 📦 Ürün Stok Durumu
 urunler_df = pd.read_excel("Urunler.xlsx")
-urunler_df.columns = [c.strip().lower().replace(" ", "_").replace("-", "_") for c in urunler_df.columns]
+urunler_df.columns = [
+    c.strip().lower()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("ç", "c").replace("ş", "s").replace("ğ", "g")
+    .replace("ü", "u").replace("ı", "i").replace("ö", "o")
+    for c in urunler_df.columns
+]
+
 urunler_df["stok"] = pd.to_numeric(urunler_df["stok"], errors="coerce").fillna(0)
 
 stokta_olmayan_sayi = (urunler_df["stok"] <= 0).sum()
@@ -318,12 +339,11 @@ col_stok1, col_stok2 = st.columns(2)
 col_stok1.metric("🛑 Stokta Olmayan Ürün", stokta_olmayan_sayi)
 col_stok2.metric("⚠️ Kritik Stok (<=1)", kritik_stok_sayi)
 
-# GeoJSON'daki tüm illeri al
+# Eksik illeri sıfır değerle dataframe'e ekle
 geo_iller = [feature["properties"]["name"] for feature in turkiye_geojson["features"]]
 mevcut_iller = il_ozet["il"].tolist()
 eksik_iller = list(set(geo_iller) - set(mevcut_iller))
 
-# Eksik illeri sıfır değerle dataframe'e ekle
 eksik_df = pd.DataFrame({
     "il": eksik_iller,
     "Toplam Ciro": 0,
@@ -332,35 +352,47 @@ eksik_df = pd.DataFrame({
 
 il_ozet = pd.concat([il_ozet, eksik_df], ignore_index=True)
 
-# -------------------- CİRO HARİTASI --------------------
-st.markdown("### 📏 İl Bazında Ciro Dağılımı")
-fig_ciro = px.choropleth(
-    il_ozet,
-    geojson=turkiye_geojson,
-    featureidkey="properties.name",
-    locations="il",
-    color="Toplam Ciro",
-    color_continuous_scale="Blues",
-    labels={"Toplam Ciro": "₺"},
-    title="İl Bazında Ciro Haritası"
-)
-fig_ciro.update_geos(fitbounds="locations", visible=False)
-st.plotly_chart(fig_ciro, use_container_width=True)
+# -------------------- HARİTALARI YAN YANA VE ZOOM KAPALI --------------------
+st.markdown("### 🌍 İl Bazında Ciro ve Kâr Dağılımı")
 
-# -------------------- NET KÂR HARİTASI --------------------
-st.markdown("### 🌎 İl Bazlı Net Kâr Haritası")
-fig_kar = px.choropleth(
-    il_ozet,
-    geojson=turkiye_geojson,
-    locations="il",
-    featureidkey="properties.name",
-    color="Net Kâr",
-    color_continuous_scale="Greens",
-    hover_name="il",
-    labels={"Net Kâr": "₺"}
-)
-fig_kar.update_geos(fitbounds="locations", visible=False)
-st.plotly_chart(fig_kar, use_container_width=True)
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("📊 Ciro Haritası")
+    fig_ciro = px.choropleth(
+        il_ozet,
+        geojson=turkiye_geojson,
+        featureidkey="properties.name",
+        locations="il",
+        color="Toplam Ciro",
+        color_continuous_scale="Blues",
+        labels={"Toplam Ciro": "₺"},
+    )
+    fig_ciro.update_geos(fitbounds="locations", visible=False)
+    fig_ciro.update_layout(
+        margin=dict(l=0, r=0, t=30, b=0),
+        dragmode=False  # 👈 Scroll ile zoom kapalı
+    )
+    st.plotly_chart(fig_ciro, use_container_width=True)
+
+with col2:
+    st.subheader("📈 Net Kâr Haritası")
+    fig_kar = px.choropleth(
+        il_ozet,
+        geojson=turkiye_geojson,
+        locations="il",
+        featureidkey="properties.name",
+        color="Net Kâr",
+        color_continuous_scale="Greens",
+        labels={"Net Kâr": "₺"},
+        hover_name="il"
+    )
+    fig_kar.update_geos(fitbounds="locations", visible=False)
+    fig_kar.update_layout(
+        margin=dict(l=0, r=0, t=30, b=0),
+        dragmode=False  # 👈 Scroll ile zoom kapalı
+    )
+    st.plotly_chart(fig_kar, use_container_width=True)
 
 # --------------------
 # MAĞAZA / PAZARYERİ FİLTRESİ
