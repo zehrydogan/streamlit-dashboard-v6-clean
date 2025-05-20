@@ -271,10 +271,12 @@ sayisal_kolonlar = [
     "satir_kargo_fiyat"  # ← doğru hali bu!
 ]
 for kolon in sayisal_kolonlar:
-    if kolon in df_filtered.columns:
-        df_filtered[kolon] = pd.to_numeric(df_filtered[kolon], errors="coerce").fillna(0)
-    else:
+    if kolon not in df_filtered.columns:
+        # Eğer kolon yoksa oluştur ve sıfırla
         df_filtered[kolon] = 0.0
+    else:
+        # Varsa sayıya çevir
+        df_filtered[kolon] = pd.to_numeric(df_filtered[kolon], errors="coerce").fillna(0)
 
 
 
