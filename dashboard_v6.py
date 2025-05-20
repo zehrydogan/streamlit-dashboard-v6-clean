@@ -122,6 +122,8 @@ toptan_df = toptan_df.rename(columns={
     "maliyet_fiyati": "urun_toplam_maliyet",
     "kar": "kar"
 })
+print(df.columns)
+
 toptan_df["satir_komisyon"] = 0
 toptan_df["kargo_fiyat"] = 0
 toptan_df["siparis_durumu"] = "aktif"
@@ -184,7 +186,7 @@ iade_df["siparis_tarihi"] = pd.to_datetime(iade_df["İade Tarihi"], format="%d.%
 
 
 iade_df["key"] = iade_df["Sipariş No"].astype(str) + "|" + iade_df["Stok Kodu"].astype(str)
-df["key"] = df["siparis_no"].astype(str) + "|" + df["stok_kodu"].astype(str)
+df["key"] = df["Sipariş No"].astype(str) + "|" + df["Stok Kodu"].astype(str)
 
 # Eşleşen iadelerin karlarını sıfırla
 df.loc[df["key"].isin(iade_df["key"]), "kar"] = 0.0
