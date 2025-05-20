@@ -102,9 +102,9 @@ df = pd.read_excel("Siparisler.xlsx")
 df["siparis_tarihi"] = pd.to_datetime(df["Sip. Tarihi"], errors="coerce")
 
 toptan_df = pd.read_excel("Toptan.xlsx")
+toptan_df.columns = [c.strip() for c in toptan_df.columns]
 toptan_df["siparis_tarihi"] = pd.to_datetime(
     toptan_df["Tarihi"].astype(str) + " " + toptan_df["Saati"].astype(str), errors="coerce")
-
 
 toptan_df = toptan_df.rename(columns={
     "Pazaryeri": "pazaryeri",
