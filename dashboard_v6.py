@@ -99,7 +99,7 @@ def normalize_magaza(s):
 
 
 df = pd.read_excel("Siparisler.xlsx")
-df["siparis_tarihi"] = pd.to_datetime(df["siparis_tarihi"], errors="coerce")
+df["siparis_tarihi"] = pd.to_datetime(df["Sip. Tarihi"], errors="coerce")
 
 toptan_df = pd.read_excel("Toptan.xlsx")
 toptan_df["siparis_tarihi"] = pd.to_datetime(
