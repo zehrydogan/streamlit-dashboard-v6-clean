@@ -8,39 +8,66 @@ import geopandas as gpd
 import plotly.express as px
 
 st.set_page_config(page_title="Satış Dashboard", layout="wide")
+
 st.markdown("""
 <style>
-/* Sidebar'ı koyu tema yap */
+/* Sidebar arka planı ve genel yazı rengi */
 section[data-testid="stSidebar"] {
     background-color: #1e1e1e !important;
     color: white;
 }
-
-/* Sidebar içeriğindeki metin ve başlıkları açık yap */
+.st-emotion-cache-p7i6r9 {
+    font-family: "Source Sans Pro", sans-serif;
+    font-size: 1rem;
+    color: rgb(247 247 247);
+}
+/* Sidebar başlık ve metinler */
 section[data-testid="stSidebar"] .css-1v0mbdj,
 section[data-testid="stSidebar"] .css-10trblm,
-section[data-testid="stSidebar"] label,
-section[data-testid="stSidebar"] span,
 section[data-testid="stSidebar"] h1,
 section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3,
-section[data-testid="stSidebar"] h4 {
+section[data-testid="stSidebar"] h4,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] span {
     color: #f0f0f0 !important;
 }
 
-/* Sidebar inputları (selectbox vs) karanlık hale getir */
-section[data-testid="stSidebar"] .stTextInput>div>div>input,
-section[data-testid="stSidebar"] .stDateInput>div>input,
+/* Input alanlarını koyulaştır (selectbox, input vs) */
+section[data-testid="stSidebar"] input,
+section[data-testid="stSidebar"] select,
+section[data-testid="stSidebar"] textarea,
 section[data-testid="stSidebar"] .stMultiSelect,
-section[data-testid="stSidebar"] .stSelectbox,
-section[data-testid="stSidebar"] .stRadio>div>label {
+section[data-testid="stSidebar"] .stDateInput,
+section[data-testid="stSidebar"] .stTextInput,
+section[data-testid="stSidebar"] .stSelectbox {
     background-color: #2c2c2c !important;
-    color: #ffffff !important;
+    color: white !important;
     border: 1px solid #444 !important;
     border-radius: 5px;
 }
+
+/* Radio buton metinlerini beyaz ve görünür yap */
+div[data-baseweb="radio"] label > div:first-child > span {
+    color: white !important;
+    opacity: 1 !important;
+    font-weight: 500;
+}
+
+/* Seçili radio dış kutusu beyaz */
+div[data-baseweb="radio"] input[type="radio"]:checked + div {
+    background-color: white !important;
+    border-color: white !important;
+}
+
+/* Seçili radio iç daireyi siyah yap */
+div[data-baseweb="radio"] input[type="radio"]:checked + div::before {
+    background-color: black !important;
+}
 </style>
 """, unsafe_allow_html=True)
+
+
 
 # --------------------
 # GÖMÜLÜ CSS
@@ -644,12 +671,56 @@ grup = df_filtered.groupby("pazaryeri").agg({
     "satir_komisyon": "Komisyon Tutarı"
 })
 
-
 st.markdown("### 🏷️ Pazaryerine Göre Ciro, Kâr, Komisyon, Kargo")
+
 col12, col13 = st.columns(2)
+
 with col12:
-    st.bar_chart(grup.set_index("pazaryeri")["Toplam Ciro"])
-    st.bar_chart(grup.set_index("pazaryeri")["Net Kâr"])
+    st.subheader("💰 Ciro ve Kâr")
+
+    fig_ciro = px.bar(
+        grup,
+        x="pazaryeri",
+        y="Toplam Ciro",
+        title="Toplam Ciro",
+        text_auto=".2s",
+        labels={"pazaryeri": "Pazaryeri", "Toplam Ciro": "₺"}
+    )
+    fig_ciro.update_layout(dragmode=False)  # 👈 Zoom ve pan kapalı
+    st.plotly_chart(fig_ciro, use_container_width=True)
+
+    fig_kar = px.bar(
+        grup,
+        x="pazaryeri",
+        y="Net Kâr",
+        title="Net Kâr",
+        text_auto=".2s",
+        labels={"pazaryeri": "Pazaryeri", "Net Kâr": "₺"}
+    )
+    fig_kar.update_layout(dragmode=False)
+    st.plotly_chart(fig_kar, use_container_width=True)
+
 with col13:
-    st.bar_chart(grup.set_index("pazaryeri")["Kargo Tutarı"])
-    st.bar_chart(grup.set_index("pazaryeri")["Komisyon Tutarı"])
+    st.subheader("📦 Kargo & Komisyon")
+
+    fig_kargo = px.bar(
+        grup,
+        x="pazaryeri",
+        y="Kargo Tutarı",
+        title="Kargo Tutarı",
+        text_auto=".2s",
+        labels={"pazaryeri": "Pazaryeri", "Kargo Tutarı": "₺"}
+    )
+    fig_kargo.update_layout(dragmode=False)
+    st.plotly_chart(fig_kargo, use_container_width=True)
+
+    fig_komisyon = px.bar(
+        grup,
+        x="pazaryeri",
+        y="Komisyon Tutarı",
+        title="Komisyon Tutarı",
+        text_auto=".2s",
+        labels={"pazaryeri": "Pazaryeri", "Komisyon Tutarı": "₺"}
+    )
+    fig_komisyon.update_layout(dragmode=False)
+    st.plotly_chart(fig_komisyon, use_container_width=True)
