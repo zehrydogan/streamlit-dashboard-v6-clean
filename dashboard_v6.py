@@ -98,10 +98,10 @@ def normalize_magaza(s):
         return s
 
 
-df = pd.read_excel("siparisler.xlsx")
+df = pd.read_excel("Siparisler.xlsx")
 df["siparis_tarihi"] = pd.to_datetime(df["siparis_tarihi"], errors="coerce")
 
-toptan_df = pd.read_excel("toptan.xlsx")
+toptan_df = pd.read_excel("Toptan.xlsx")
 toptan_df["siparis_tarihi"] = pd.to_datetime(
     toptan_df["Tarihi"].astype(str) + " " + toptan_df["Saati"].astype(str), errors="coerce")
 
@@ -143,8 +143,8 @@ manuel_veri = pd.DataFrame([{
     "satir_komisyon": 0.0,
     "kargo_fiyat": 0.0,
     "siparis_durumu": "aktif",
-    "magaza": "sporsuit",            # 👈 mağaza SPORSUIT
-    "pazaryeri": "Perakende",        # 👈 pazaryeri PERAKENDE
+    "magaza": "sporsuit",
+    "pazaryeri": "Perakende",
     "musteri_adi": "-",
     "urun_adi": "-",
     "key": "TP_MANUEL|SPRS-TEST-001"
@@ -169,7 +169,7 @@ df = pd.concat([df, toptan_df], ignore_index=True)
 df["magaza_normalized"] = df["magaza"].apply(normalize_magaza)
 
 # -------------------- İADELER --------------------
-iade_df = pd.read_excel("iade.xlsx")
+iade_df = pd.read_excel("İadeler.xlsx")
 iade_df.columns = [c.strip() for c in iade_df.columns]
 iade_df["siparis_tarihi"] = pd.to_datetime(iade_df["İade Tarihi"], format="%d.%m.%Y %H:%M", errors="coerce").dt.date
 
@@ -577,7 +577,7 @@ with col13:
 
 # --------------------
 # 📦 Ürün Stok Durumu
-urunler_df = pd.read_excel("urunler.xlsx")
+urunler_df = pd.read_excel("Urunler.xlsx")
 urunler_df["stok"] = pd.to_numeric(urunler_df["stok"], errors="coerce").fillna(0)
 
 stokta_olmayan_sayi = (urunler_df["stok"] <= 0).sum()
