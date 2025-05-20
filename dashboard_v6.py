@@ -191,7 +191,6 @@ df["key"] = df["Sipariş No"].astype(str) + "|" + df["Stok Kodu"].astype(str)
 # Eşleşen iadelerin karlarını sıfırla
 df.loc[df["key"].isin(iade_df["key"]), "kar"] = 0.0
 
-
 # -------------------- MAĞAZA LİSTESİ GÜNCELLE --------------------
 st.session_state["tum_magaza_listesi"] = ["Sporsuit", "LATTE", "Depoba", "İLYAKİ", "AIDA HOME", "Perakende"]
 
@@ -240,39 +239,59 @@ with st.sidebar:
         options=["Amazon", "Trendyol", "PrestaShop", "Hepsiburada", "N11", "Perakende"],
         default=["Amazon", "Trendyol", "PrestaShop", "Hepsiburada", "N11", "Perakende"]
     )
+df.columns = [c.strip().lower().replace(" ", "_").replace("-", "_")
+              .replace("ç", "c").replace("ş", "s").replace("ğ", "g")
+              .replace("ü", "u").replace("ı", "i").replace("ö", "o") for c in df.columns]
 
-
-
-# --------------------
-# TARİH FİLTRESİ UYGULA
-# --------------------
+# 2. Tarih filtresini uygula
+# 2. Tarih filtresini uygula
 if filtre_tipi == "Tarih Aralığı":
     baslangic, bitis = tarih_aralik
     df_filtered = df[
         (df["siparis_tarihi"].dt.date >= baslangic) &
         (df["siparis_tarihi"].dt.date <= bitis)
-        ]
+    ]
     iade_df = iade_df[
         (iade_df["siparis_tarihi"] >= baslangic) &
         (iade_df["siparis_tarihi"] <= bitis)
-        ]
+    ]
 else:
-    yil_min = df["siparis_tarihi"].dt.year.min()
-    yil_max = datetime.datetime.now().year
-    yillar = list(range(int(yil_min), int(yil_max) + 1))
-    aylar = list(range(1, 13))
-    ay_isimleri = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
-                   "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
-    col_yil, col_ay = st.columns(2)
-    # secilen_yil = col_yil.selectbox("🗓️ Yıl Seç", yillar, index=len(yillar) - 1, key="main_yil")
-    # secilen_ay = col_ay.selectbox("📆 Ay Seç", ay_isimleri, index=datetime.datetime.now().month - 1, key="main_ay")
-
     donem = f"{secilen_yil}-{aylar[ay_isimleri.index(secilen_ay)]:02d}"
     df_filtered = df[df["siparis_tarihi"].dt.strftime("%Y-%m") == donem]
     iade_df = iade_df[
         iade_df["siparis_tarihi"].apply(lambda d: d.strftime("%Y-%m") == donem if pd.notnull(d) else False)
     ]
-df_filtered["fatura_il"] = df_filtered["fatura_il"].str.strip().str.title()
+
+# 🔧 Sayısal kolonları
+sayisal_kolonlar = [
+    "satir_fiyat",
+    "kar",
+    "urun_toplam_maliyet",
+    "satir_komisyon",
+    "satir_kargo_fiyat"  # ← doğru hali bu!
+]
+for kolon in sayisal_kolonlar:
+    if kolon in df_filtered.columns:
+        df_filtered[kolon] = pd.to_numeric(df_filtered[kolon], errors="coerce").fillna(0)
+    else:
+        df_filtered[kolon] = 0.0
+
+
+
+# 3. Artık 'fatura_il' kolonu varsa düzenle
+if "fatura_il" in df_filtered.columns:
+    df_filtered["fatura_il"] = df_filtered["fatura_il"].astype(str).str.strip().str.title()
+elif "fatura_-_il" in df_filtered.columns:
+    df_filtered.rename(columns={"fatura_-_il": "fatura_il"}, inplace=True)
+    df_filtered["fatura_il"] = df_filtered["fatura_il"].astype(str).str.strip().str.title()
+else:
+    df_filtered["fatura_il"] = "Bilinmiyor"
+
+df_filtered["satir_fiyat"] = pd.to_numeric(df_filtered["satir_fiyat"], errors="coerce").fillna(0)
+df_filtered["kar"] = pd.to_numeric(df_filtered["kar"], errors="coerce").fillna(0)
+df_filtered["urun_toplam_maliyet"] = pd.to_numeric(df_filtered["urun_toplam_maliyet"], errors="coerce").fillna(0)
+
+# 4. İl bazında özet veriyi oluştur
 il_ozet = df_filtered.groupby("fatura_il").agg({
     "satir_fiyat": "sum",
     "kar": "sum"
@@ -281,6 +300,21 @@ il_ozet = df_filtered.groupby("fatura_il").agg({
     "satir_fiyat": "Toplam Ciro",
     "kar": "Net Kâr"
 })
+
+
+# --------------------
+# 📦 Ürün Stok Durumu
+urunler_df = pd.read_excel("Urunler.xlsx")
+urunler_df.columns = [c.strip().lower().replace(" ", "_").replace("-", "_") for c in urunler_df.columns]
+urunler_df["stok"] = pd.to_numeric(urunler_df["stok"], errors="coerce").fillna(0)
+
+stokta_olmayan_sayi = (urunler_df["stok"] <= 0).sum()
+kritik_stok_sayi = (urunler_df["stok"] <= 1).sum()
+
+st.markdown("### 📦 Stok Durumu Özeti")
+col_stok1, col_stok2 = st.columns(2)
+col_stok1.metric("🛑 Stokta Olmayan Ürün", stokta_olmayan_sayi)
+col_stok2.metric("⚠️ Kritik Stok (<=1)", kritik_stok_sayi)
 
 # GeoJSON'daki tüm illeri al
 geo_iller = [feature["properties"]["name"] for feature in turkiye_geojson["features"]]
@@ -339,7 +373,7 @@ df["magaza_normalized"] = df["magaza"].apply(normalize_magaza)
 
 # 🔢 Sipariş Türleri
 toplam_siparis = len(df_filtered)
-iptal_sayisi = df_filtered[df_filtered["siparis_durumu"].str.lower() == "iptal"].shape[0]
+iptal_sayisi = df_filtered[df_filtered["siparis_satir_durumu"].str.lower() == "iptal"].shape[0]
 iade_sayisi = iade_df.shape[0]
 aktif_siparis = toplam_siparis - iptal_sayisi - iade_sayisi
 
@@ -362,7 +396,7 @@ col8.metric("📌 Ortalama Kâr", f"{df_filtered['kar'].mean():,.2f} ₺")
 col9, col10, col11, col12 = st.columns(4)
 col9.metric("📉 Ortalama Maliyet", f"{df_filtered['urun_toplam_maliyet'].mean():,.2f} ₺")
 col10.metric("📊 Komisyon Tutarı", f"{df_filtered['satir_komisyon'].sum():,.2f} ₺")
-col11.metric("🚚 Kargo Tutarı", f"{df_filtered['kargo_fiyat'].sum():,.2f} ₺")
+col11.metric("🚚 Kargo Tutarı", f"{df_filtered['satir_kargo_fiyat'].sum():,.2f} ₺")
 
 
 
@@ -420,7 +454,7 @@ pivot_kar = pd.pivot_table(df_filtered, index="magaza_normalized", columns="paza
 # Gider = maliyet + komisyon + kargo
 pivot_maliyet = pd.pivot_table(df_filtered, index="magaza_normalized", columns="pazaryeri", values="urun_toplam_maliyet", aggfunc="sum", fill_value=0)
 pivot_komisyon = pd.pivot_table(df_filtered, index="magaza_normalized", columns="pazaryeri", values="satir_komisyon", aggfunc="sum", fill_value=0)
-pivot_kargo = pd.pivot_table(df_filtered, index="magaza_normalized", columns="pazaryeri", values="kargo_fiyat", aggfunc="sum", fill_value=0)
+pivot_kargo = pd.pivot_table(df_filtered, index="magaza_normalized", columns="pazaryeri", values="satir_kargo_fiyat", aggfunc="sum", fill_value=0)
 pivot_gider = pivot_maliyet.add(pivot_komisyon, fill_value=0).add(pivot_kargo, fill_value=0)
 
 # Boş DataFrame
@@ -567,12 +601,12 @@ st.altair_chart(chart, use_container_width=True)
 grup = df_filtered.groupby("pazaryeri").agg({
     "satir_fiyat": "sum",
     "kar": "sum",
-    "kargo_fiyat": "sum",
+    "satir_kargo_fiyat": "sum",
     "satir_komisyon": "sum"
 }).reset_index().rename(columns={
     "satir_fiyat": "Toplam Ciro",
     "kar": "Net Kâr",
-    "kargo_fiyat": "Kargo Tutarı",
+    "satir_kargo_fiyat": "Kargo Tutarı",
     "satir_komisyon": "Komisyon Tutarı"
 })
 
@@ -585,17 +619,3 @@ with col12:
 with col13:
     st.bar_chart(grup.set_index("pazaryeri")["Kargo Tutarı"])
     st.bar_chart(grup.set_index("pazaryeri")["Komisyon Tutarı"])
-
-# --------------------
-# 📦 Ürün Stok Durumu
-urunler_df = pd.read_excel("Urunler.xlsx")
-urunler_df["stok"] = pd.to_numeric(urunler_df["stok"], errors="coerce").fillna(0)
-
-stokta_olmayan_sayi = (urunler_df["stok"] <= 0).sum()
-kritik_stok_sayi = (urunler_df["stok"] <= 1).sum()
-
-st.markdown("### 📦 Stok Durumu Özeti")
-col_stok1, col_stok2 = st.columns(2)
-col_stok1.metric("🛑 Stokta Olmayan Ürün", stokta_olmayan_sayi)
-col_stok2.metric("⚠️ Kritik Stok (<=1)", kritik_stok_sayi)
-
