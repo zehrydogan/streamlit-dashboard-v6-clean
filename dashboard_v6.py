@@ -6,15 +6,78 @@ import unicodedata
 import json
 import geopandas as gpd
 import plotly.express as px
+import locale
+
 
 st.set_page_config(page_title="Satış Dashboard", layout="wide")
 
 st.markdown("""
 <style>
+label.css-1w0j46c, label.css-1y4p8pa { 
+    font-size: 15px !important;
+    color: #ecf0f1 !important;
+    padding-left: 8px;
+}
+.st-emotion-cache-tj3uvl {
+    padding: 0px calc(2px + 1rem) 19rem;
+    margin-top: -13%;
+}
+.st-dh {
+    border-bottom-color: rgba(0, 0, 0, 0.75);
+}
+.st-dg {
+    border-top-color: rgba(0, 0, 0, 0.75);
+}
+
+.st-df {
+    border-right-color: rgba(0, 0, 0, 0.75);
+}
+.st-av {
+    background-color: rgba(0, 0, 0, 0.75);
+}
+.st-de {
+    border-left-color: rgba(0, 0, 0, 0.75);
+}
 /* Sidebar arka planı ve genel yazı rengi */
+section[data-testid="stSidebar"] > div:first-child {
+    overflow: hidden !important;
+    height: 100% !important;
+}
 section[data-testid="stSidebar"] {
+    background-color: rgb(0 0 0) !important;
+    color: rgb(255, 255, 255);
+}
+
+/* Tarih seçim açılır pencere (takvim) arka planı */
+div[role="dialog"] {
     background-color: #1e1e1e !important;
-    color: white;
+    color: white !important;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+/* Takvim içindeki günler */
+div[role="dialog"] td {
+    color: white !important;
+}
+
+/* Seçili tarih yuvarlak görünümünü değiştir */
+div[role="dialog"] td > div[aria-selected="true"] {
+    background-color: #00cec9 !important;
+    color: black !important;
+    border-radius: 20px !important;
+}
+
+/* Hover efekti */
+div[role="dialog"] td:hover {
+    background-color: #3d3d3d !important;
+    border-radius: 20px;
+}
+
+section[data-testid="stSidebar"] .stDateInput input {
+    border-radius: 6px;
+    padding: 6px 46px 6px 61px;
+    font-size: 16px;
 }
 .st-emotion-cache-p7i6r9 {
     font-family: "Source Sans Pro", sans-serif;
@@ -34,17 +97,32 @@ section[data-testid="stSidebar"] span {
 }
 
 /* Input alanlarını koyulaştır (selectbox, input vs) */
-section[data-testid="stSidebar"] input,
+section[data-testid="stSidebar"] input, section[data-testid="stSidebar"] select,
+ section[data-testid="stSidebar"] textarea, 
+ section[data-testid="stSidebar"] .stMultiSelect,
+  section[data-testid="stSidebar"] .stDateInput, 
+  section[data-testid="stSidebar"] .stTextInput,
+   section[data-testid="stSidebar"] .stSelectbox {
+    /* background-color: #2c2c2c !important; */
+    color: rgba(0, 0, 0, 0.75) !important;
+    /* border: 1px solid #444 !important; */
+    border-radius: 5px;
+}
 section[data-testid="stSidebar"] select,
 section[data-testid="stSidebar"] textarea,
 section[data-testid="stSidebar"] .stMultiSelect,
 section[data-testid="stSidebar"] .stDateInput,
 section[data-testid="stSidebar"] .stTextInput,
 section[data-testid="stSidebar"] .stSelectbox {
-    background-color: #2c2c2c !important;
-    color: white !important;
-    border: 1px solid #444 !important;
+    /* background-color: #2c2c2c !important; */
+    color: rgba(0, 0, 0, 0.75) !important;
+    /* border: 1px solid #444 !important; */
     border-radius: 5px;
+}
+section[data-testid="stSidebar"] .stDateInput input {
+    border-radius: 6px;
+    padding: 6px 46px 6px 61px;
+    font-size: 16px;
 }
 
 /* Radio buton metinlerini beyaz ve görünür yap */
@@ -63,6 +141,9 @@ div[data-baseweb="radio"] input[type="radio"]:checked + div {
 /* Seçili radio iç daireyi siyah yap */
 div[data-baseweb="radio"] input[type="radio"]:checked + div::before {
     background-color: black !important;
+}
+.st-h0::after {
+    background-color: #2c2c2c;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -248,29 +329,43 @@ with st.sidebar:
         ay_isimleri = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
                        "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
         secilen_yil = st.selectbox("🗓️ Yıl Seç", yillar, index=len(yillar) - 1, key="sidebar_yil")
-        secilen_ay = st.selectbox("📆 Ay Seç", ay_isimleri, index=datetime.datetime.now().month - 1, key="sidebar_ay")
+        secilen_ay = st.selectbox("📆 Ay Seç", ay_isimleri, index=datetime.datetime.now().month - 1,
+                                  key="sidebar_ay")
 
         donem = f"{secilen_yil}-{aylar[ay_isimleri.index(secilen_ay)]:02d}"
 
-    # ---- MAĞAZA FİLTRESİ ----
-    st.markdown("### 🏢 Firma Filtresi")
-    verideki_magazalar = df["magaza_normalized"].dropna().unique().tolist()
-    sabit_magazalar = ["sporsuit", "latte", "depoba", "ilyaki", "aida home"]
-    tum_magazalar = sorted(set(verideki_magazalar + sabit_magazalar))
-    secilen_magazalar = st.multiselect("Firma Seç", options=tum_magazalar, default=tum_magazalar)
 
-    # ---- PAZARYERİ FİLTRESİ ----
-    st.markdown("### 🛍️ Pazaryeri Filtresi")
-    secilen_pazaryerleri = st.multiselect(
-        "Pazaryeri Seç",
-        options=["Amazon", "Trendyol", "PrestaShop", "Hepsiburada", "N11", "Perakende"],
-        default=["Amazon", "Trendyol", "PrestaShop", "Hepsiburada", "N11", "Perakende"]
-    )
+    # ---------------- Firma Checkbox 2'li ----------------
+    st.markdown("### 🏢 Firma Seçiniz")
+
+    verideki_magazalar = df["magaza_normalized"].dropna().unique().tolist()
+    sabit_magazalar = ["sporsuit", "latte", "depoba", "ilyaki", "aida home", "perakende"]
+    tum_magazalar = sorted(set(verideki_magazalar + sabit_magazalar))
+
+    secilen_magazalar = []
+    cols = st.columns(2)
+    for i, magaza in enumerate(tum_magazalar):
+        col = cols[i % 2]
+        with col:
+            if st.checkbox(magaza.title(), value=True, key=f"magaza_{magaza}"):
+                secilen_magazalar.append(magaza)
+
+    # ---------------- Pazaryeri Checkbox 2'li ----------------
+    st.markdown("### 🛍️ Pazaryeri Seçiniz")
+
+    tum_pazaryerleri = ["Amazon", "Trendyol", "PrestaShop", "Hepsiburada", "N11", "Perakende"]
+    secilen_pazaryerleri = []
+    cols = st.columns(2)
+    for i, pazar in enumerate(tum_pazaryerleri):
+        col = cols[i % 2]
+        with col:
+            if st.checkbox(pazar, value=True, key=f"pazaryeri_{pazar}"):
+                secilen_pazaryerleri.append(pazar)
+
 df.columns = [c.strip().lower().replace(" ", "_").replace("-", "_")
               .replace("ç", "c").replace("ş", "s").replace("ğ", "g")
               .replace("ü", "u").replace("ı", "i").replace("ö", "o") for c in df.columns]
 
-# 2. Tarih filtresini uygula
 # 2. Tarih filtresini uygula
 if filtre_tipi == "Tarih Aralığı":
     baslangic, bitis = tarih_aralik
@@ -344,27 +439,7 @@ il_ozet = df_filtered.groupby("fatura_il").agg({
 })
 
 
-# --------------------
-# 📦 Ürün Stok Durumu
-urunler_df = pd.read_excel("Urunler.xlsx")
-urunler_df.columns = [
-    c.strip().lower()
-    .replace(" ", "_")
-    .replace("-", "_")
-    .replace("ç", "c").replace("ş", "s").replace("ğ", "g")
-    .replace("ü", "u").replace("ı", "i").replace("ö", "o")
-    for c in urunler_df.columns
-]
 
-urunler_df["stok"] = pd.to_numeric(urunler_df["stok"], errors="coerce").fillna(0)
-
-stokta_olmayan_sayi = (urunler_df["stok"] <= 0).sum()
-kritik_stok_sayi = (urunler_df["stok"] <= 1).sum()
-
-st.markdown("### 📦 Stok Durumu Özeti")
-col_stok1, col_stok2 = st.columns(2)
-col_stok1.metric("🛑 Stokta Olmayan Ürün", stokta_olmayan_sayi)
-col_stok2.metric("⚠️ Kritik Stok (<=1)", kritik_stok_sayi)
 
 # Eksik illeri sıfır değerle dataframe'e ekle
 geo_iller = [feature["properties"]["name"] for feature in turkiye_geojson["features"]]
@@ -671,56 +746,78 @@ grup = df_filtered.groupby("pazaryeri").agg({
     "satir_komisyon": "Komisyon Tutarı"
 })
 
-st.markdown("### 🏷️ Pazaryerine Göre Ciro, Kâr, Komisyon, Kargo")
+# st.markdown("### 🏷️ Pazaryerine Göre Ciro, Kâr, Komisyon, Kargo")
+#
+# col12, col13 = st.columns(2)
+#
+# with col12:
+#     st.subheader("💰 Ciro ve Kâr")
+#
+#     fig_ciro = px.bar(
+#         grup,
+#         x="pazaryeri",
+#         y="Toplam Ciro",
+#         title="Toplam Ciro",
+#         text_auto=".2s",
+#         labels={"pazaryeri": "Pazaryeri", "Toplam Ciro": "₺"}
+#     )
+#     fig_ciro.update_layout(dragmode=False)  # 👈 Zoom ve pan kapalı
+#     st.plotly_chart(fig_ciro, use_container_width=True)
+#
+#     fig_kar = px.bar(
+#         grup,
+#         x="pazaryeri",
+#         y="Net Kâr",
+#         title="Net Kâr",
+#         text_auto=".2s",
+#         labels={"pazaryeri": "Pazaryeri", "Net Kâr": "₺"}
+#     )
+#     fig_kar.update_layout(dragmode=False)
+#     st.plotly_chart(fig_kar, use_container_width=True)
+#
+# with col13:
+#     st.subheader("📦 Kargo & Komisyon")
+#
+#     fig_kargo = px.bar(
+#         grup,
+#         x="pazaryeri",
+#         y="Kargo Tutarı",
+#         title="Kargo Tutarı",
+#         text_auto=".2s",
+#         labels={"pazaryeri": "Pazaryeri", "Kargo Tutarı": "₺"}
+#     )
+#     fig_kargo.update_layout(dragmode=False)
+#     st.plotly_chart(fig_kargo, use_container_width=True)
+#
+#     fig_komisyon = px.bar(
+#         grup,
+#         x="pazaryeri",
+#         y="Komisyon Tutarı",
+#         title="Komisyon Tutarı",
+#         text_auto=".2s",
+#         labels={"pazaryeri": "Pazaryeri", "Komisyon Tutarı": "₺"}
+#     )
+#     fig_komisyon.update_layout(dragmode=False)
+#     st.plotly_chart(fig_komisyon, use_container_width=True)
 
-col12, col13 = st.columns(2)
+# --------------------
+# 📦 Ürün Stok Durumu
+urunler_df = pd.read_excel("Urunler.xlsx")
+urunler_df.columns = [
+    c.strip().lower()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("ç", "c").replace("ş", "s").replace("ğ", "g")
+    .replace("ü", "u").replace("ı", "i").replace("ö", "o")
+    for c in urunler_df.columns
+]
 
-with col12:
-    st.subheader("💰 Ciro ve Kâr")
+urunler_df["stok"] = pd.to_numeric(urunler_df["stok"], errors="coerce").fillna(0)
 
-    fig_ciro = px.bar(
-        grup,
-        x="pazaryeri",
-        y="Toplam Ciro",
-        title="Toplam Ciro",
-        text_auto=".2s",
-        labels={"pazaryeri": "Pazaryeri", "Toplam Ciro": "₺"}
-    )
-    fig_ciro.update_layout(dragmode=False)  # 👈 Zoom ve pan kapalı
-    st.plotly_chart(fig_ciro, use_container_width=True)
+stokta_olmayan_sayi = (urunler_df["stok"] <= 0).sum()
+kritik_stok_sayi = (urunler_df["stok"] <= 1).sum()
 
-    fig_kar = px.bar(
-        grup,
-        x="pazaryeri",
-        y="Net Kâr",
-        title="Net Kâr",
-        text_auto=".2s",
-        labels={"pazaryeri": "Pazaryeri", "Net Kâr": "₺"}
-    )
-    fig_kar.update_layout(dragmode=False)
-    st.plotly_chart(fig_kar, use_container_width=True)
-
-with col13:
-    st.subheader("📦 Kargo & Komisyon")
-
-    fig_kargo = px.bar(
-        grup,
-        x="pazaryeri",
-        y="Kargo Tutarı",
-        title="Kargo Tutarı",
-        text_auto=".2s",
-        labels={"pazaryeri": "Pazaryeri", "Kargo Tutarı": "₺"}
-    )
-    fig_kargo.update_layout(dragmode=False)
-    st.plotly_chart(fig_kargo, use_container_width=True)
-
-    fig_komisyon = px.bar(
-        grup,
-        x="pazaryeri",
-        y="Komisyon Tutarı",
-        title="Komisyon Tutarı",
-        text_auto=".2s",
-        labels={"pazaryeri": "Pazaryeri", "Komisyon Tutarı": "₺"}
-    )
-    fig_komisyon.update_layout(dragmode=False)
-    st.plotly_chart(fig_komisyon, use_container_width=True)
+st.markdown("### 📦 Stok Durumu Özeti")
+col_stok1, col_stok2 = st.columns(2)
+col_stok1.metric("🛑 Stokta Olmayan Ürün", stokta_olmayan_sayi)
+col_stok2.metric("⚠️ Kritik Stok (<=1)", kritik_stok_sayi)
