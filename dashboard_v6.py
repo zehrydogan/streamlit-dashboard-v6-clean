@@ -6,7 +6,11 @@ import unicodedata
 import json
 import geopandas as gpd
 import plotly.express as px
-import locale
+import numpy as np
+import plotly.graph_objects as go
+from matplotlib.colors import to_rgb
+from st_aggrid import AgGrid, GridOptionsBuilder
+
 
 
 st.set_page_config(page_title="Satış Dashboard", layout="wide")
@@ -43,9 +47,17 @@ section[data-testid="stSidebar"] > div:first-child {
     overflow: hidden !important;
     height: 100% !important;
 }
+html, .main, .block-container {
+    background-color: #0c1022 !important;
+    color: #ffffff !important;
+}
+.st-emotion-cache-1v0mbdj, .st-emotion-cache-10trblm,
+.st-emotion-cache-1y4p8pa, .st-emotion-cache-1w0j46c {
+    color: #ffffff !important;
+}
 section[data-testid="stSidebar"] {
-    background-color: rgb(0 0 0) !important;
-    color: rgb(255, 255, 255);
+    background-color: #0c1022 !important;
+    color: white !important;
 }
 
 /* Tarih seçim açılır pencere (takvim) arka planı */
@@ -77,7 +89,7 @@ div[role="dialog"] td:hover {
 section[data-testid="stSidebar"] .stDateInput input {
     border-radius: 6px;
     padding: 6px 46px 6px 61px;
-    font-size: 16px;
+    font-size: 13px;
 }
 .st-emotion-cache-p7i6r9 {
     font-family: "Source Sans Pro", sans-serif;
@@ -119,11 +131,6 @@ section[data-testid="stSidebar"] .stSelectbox {
     /* border: 1px solid #444 !important; */
     border-radius: 5px;
 }
-section[data-testid="stSidebar"] .stDateInput input {
-    border-radius: 6px;
-    padding: 6px 46px 6px 61px;
-    font-size: 16px;
-}
 
 /* Radio buton metinlerini beyaz ve görünür yap */
 div[data-baseweb="radio"] label > div:first-child > span {
@@ -145,6 +152,25 @@ div[data-baseweb="radio"] input[type="radio"]:checked + div::before {
 .st-h0::after {
     background-color: #2c2c2c;
 }
+
+/* Kenarlıkların rengini siyah yap */
+.st-h0::after,
+.st-h1::after,
+.st-h2::after,
+.st-h3::after,
+.st-h4::after,
+.st-h5::after,
+.st-h6::after,
+.st-ci,
+.st-cf,
+.st-cg,
+.st-ch {
+    border-color: #000000 !important;
+    border-top-color: #000000 !important;
+    border-bottom-color: #000000 !important;
+    border-left-color: #000000 !important;
+    border-right-color: #000000 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -155,7 +181,10 @@ div[data-baseweb="radio"] input[type="radio"]:checked + div::before {
 # --------------------
 st.markdown("""
 <style>
-body { background-color: #f5f6fa; }
+body {  
+    background-color: #0c1022 !important;
+    color: #ffffff; 
+}
 header[data-testid="stHeader"] { margin-top: -5%; }
 .block-container {
     padding-top: 0.0rem;
@@ -204,6 +233,65 @@ def normalize_magaza(s):
         return "perakende"
     else:
         return s
+
+def interpolate_colors(start_hex, end_hex, n):
+    start_rgb = np.array(to_rgb(start_hex))
+    end_rgb = np.array(to_rgb(end_hex))
+    return [f'rgb({int(r*255)}, {int(g*255)}, {int(b*255)})'
+            for r, g, b in np.linspace(start_rgb, end_rgb, n)]
+
+
+def plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25):
+    # Maksimum değeri belirle
+    if any(x in label.lower() for x in ["kâr", "komisyon", "ciro", "kargo", "maliyet", "tutar"]):
+        max_val = global_max if global_max > 0 else 1
+    else:
+        max_val = min(adet_max, global_max * 1.1) if global_max > 0 else adet_max
+
+    percentage = (value / max_val) * 100 if max_val != 0 else 0
+
+    # Gradient geçiş için dilimleri oluştur
+    total_slices = 50
+    filled_slices = int((percentage / 100) * total_slices)
+    empty_slices = total_slices - filled_slices
+
+    gradient_colors = interpolate_colors(base_colors[0], base_colors[1], filled_slices)
+    pie_colors = gradient_colors + ["#2c3e50"] * empty_slices
+
+    # Değer formatlama
+    if any(x in label.lower() for x in ["kâr", "komisyon", "ciro", "kargo", "maliyet", "tutar"]):
+        formatted_value = f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".") + " ₺"
+    else:
+        formatted_value = f"{int(value):,}".replace(",", ".") + " adet"
+
+    # Grafik oluştur
+    fig = go.Figure()
+    fig.add_trace(go.Pie(
+        values=[1] * total_slices,
+        hole=0.75,
+        direction='clockwise',
+        sort=False,
+        marker=dict(colors=pie_colors, line=dict(color="#0c1022", width=1)),
+        textinfo='none',
+        hoverinfo = 'skip'
+    ))
+
+    fig.update_layout(
+        showlegend=False,
+        margin=dict(t=10, b=10, l=10, r=10),
+        height=220,
+        width=220,
+        paper_bgcolor="#0c1022",
+        annotations=[dict(
+            text=f'<b>{formatted_value}</b><br><span style="font-size:13px; color:#aaa">{label}</span>',
+            x=0.5, y=0.5, font_size=16, showarrow=False
+        )]
+    )
+    return fig
+
+@st.cache_data(show_spinner=False)
+def cached_plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25, total_slices=30):
+    return plot_gauge_gradient(value, label, base_colors, global_max, adet_max, total_slices)
 
 
 df = pd.read_excel("Siparisler.xlsx")
@@ -438,9 +526,6 @@ il_ozet = df_filtered.groupby("fatura_il").agg({
     "kar": "Net Kâr"
 })
 
-
-
-
 # Eksik illeri sıfır değerle dataframe'e ekle
 geo_iller = [feature["properties"]["name"] for feature in turkiye_geojson["features"]]
 mevcut_iller = il_ozet["il"].tolist()
@@ -454,47 +539,7 @@ eksik_df = pd.DataFrame({
 
 il_ozet = pd.concat([il_ozet, eksik_df], ignore_index=True)
 
-# -------------------- HARİTALARI YAN YANA VE ZOOM KAPALI --------------------
-st.markdown("### 🌍 İl Bazında Ciro ve Kâr Dağılımı")
 
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("📊 Ciro Haritası")
-    fig_ciro = px.choropleth(
-        il_ozet,
-        geojson=turkiye_geojson,
-        featureidkey="properties.name",
-        locations="il",
-        color="Toplam Ciro",
-        color_continuous_scale="Blues",
-        labels={"Toplam Ciro": "₺"},
-    )
-    fig_ciro.update_geos(fitbounds="locations", visible=False)
-    fig_ciro.update_layout(
-        margin=dict(l=0, r=0, t=30, b=0),
-        dragmode=False  # 👈 Scroll ile zoom kapalı
-    )
-    st.plotly_chart(fig_ciro, use_container_width=True)
-
-with col2:
-    st.subheader("📈 Net Kâr Haritası")
-    fig_kar = px.choropleth(
-        il_ozet,
-        geojson=turkiye_geojson,
-        locations="il",
-        featureidkey="properties.name",
-        color="Net Kâr",
-        color_continuous_scale="Greens",
-        labels={"Net Kâr": "₺"},
-        hover_name="il"
-    )
-    fig_kar.update_geos(fitbounds="locations", visible=False)
-    fig_kar.update_layout(
-        margin=dict(l=0, r=0, t=30, b=0),
-        dragmode=False  # 👈 Scroll ile zoom kapalı
-    )
-    st.plotly_chart(fig_kar, use_container_width=True)
 
 # --------------------
 # MAĞAZA / PAZARYERİ FİLTRESİ
@@ -515,29 +560,104 @@ aktif_siparis = toplam_siparis - iptal_sayisi - iade_sayisi
 
 # 📦 Temel Sipariş Göstergeleri
 st.markdown("### 📦 Sipariş ve Satış Özeti")
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("📦 Toplam Sipariş", toplam_siparis)
-col2.metric("✅ Aktif Sipariş", aktif_siparis)
-col3.metric("↩️ İade", iade_sayisi, delta=f"%{(iade_sayisi / toplam_siparis * 100):.2f}" if toplam_siparis else "0%")
-col4.metric("❌ İptal", iptal_sayisi, delta=f"%{(iptal_sayisi / toplam_siparis * 100):.2f}" if toplam_siparis else "0%")
+# 🎨 Renk paleti
+# 🎨 Renk geçişi tanımı (mavi → yeşil)
+base_colors = ("#00b2ff", "#00ffb3")
 
-# 💰 Ciro ve Kâr
-col5, col6, col7, col8 = st.columns(4)
-col5.metric("💰 Toplam Ciro", f"{df_filtered['satir_fiyat'].sum():,.2f} ₺")
-col6.metric("📈 Net Kâr", f"{df_filtered['kar'].sum():,.2f} ₺")
-col7.metric("🛒 Ortalama Sepet", f"{df_filtered['satir_fiyat'].mean():,.2f} ₺")
-col8.metric("📌 Ortalama Kâr", f"{df_filtered['kar'].mean():,.2f} ₺")
+metrics = [
+    {"label": "Toplam Sipariş", "value": toplam_siparis},
+    {"label": "Aktif Sipariş", "value": aktif_siparis},
+    {"label": "İade", "value": iade_sayisi},
+    {"label": "İptal", "value": iptal_sayisi},
+    {"label": "Toplam Ciro", "value": df_filtered["satir_fiyat"].sum()},
+    {"label": "Net Kâr", "value": df_filtered["kar"].sum()},
+    {"label": "Komisyon", "value": df_filtered["satir_komisyon"].sum()},
+    {"label": "Kargo", "value": df_filtered["satir_kargo_fiyat"].sum()}
+]
 
-# 📉 Maliyet ve Kesintiler
-col9, col10, col11, col12 = st.columns(4)
-col9.metric("📉 Ortalama Maliyet", f"{df_filtered['urun_toplam_maliyet'].mean():,.2f} ₺")
-col10.metric("📊 Komisyon Tutarı", f"{df_filtered['satir_komisyon'].sum():,.2f} ₺")
-col11.metric("🚚 Kargo Tutarı", f"{df_filtered['satir_kargo_fiyat'].sum():,.2f} ₺")
+if metrics:
+    global_max = max(m["value"] for m in metrics if any(x in m["label"].lower() for x in ["kâr", "komisyon", "ciro", "kargo", "maliyet", "tutar"]))
+    global_max_adet = max((m["value"] for m in metrics if not any(x in m["label"].lower() for x in ["kâr", "komisyon", "ciro", "kargo", "maliyet", "tutar"])), default=25)
 
+    for i in range(0, len(metrics), 4):
+        cols = st.columns(4)
+        for j, col in enumerate(cols):
+            if i + j < len(metrics):
+                metric = metrics[i + j]
+                with col:
+                    st.plotly_chart(
+                        plot_gauge_gradient(metric["value"], metric["label"], base_colors, global_max, adet_max=global_max_adet),
+                        use_container_width=True
+                    )
 
+# -------------------- HARİTALARI YAN YANA VE ZOOM KAPALI --------------------
+st.markdown("### 🌍 İl Bazında Ciro ve Kâr Dağılımı")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("📊 Ciro Haritası")
+    fig_ciro = px.choropleth(
+        il_ozet,
+        geojson=turkiye_geojson,
+        featureidkey="properties.name",
+        locations="il",
+        color="Toplam Ciro",
+        color_continuous_scale="Blues",
+        labels={"Toplam Ciro": "₺"},
+    )
+    fig_ciro.update_geos(fitbounds="locations", visible=False)
+    fig_ciro.update_layout(
+        margin=dict(l=0, r=0, t=30, b=0),
+        dragmode=False,
+        paper_bgcolor='rgba(0,0,0,0)',
+        geo=dict(
+            bgcolor='rgba(0,0,0,0)',
+            projection_scale=9,
+            center={"lat": 39.0, "lon": 35.0}
+        ),
+        coloraxis_colorbar=dict(
+            thickness=10,
+            len=0.6,
+            title="₺"
+        )
+    )
+
+    st.plotly_chart(fig_ciro, use_container_width=True)
+
+with col2:
+    st.subheader("📈 Net Kâr Haritası")
+    fig_kar = px.choropleth(
+        il_ozet,
+        geojson=turkiye_geojson,
+        locations="il",
+        featureidkey="properties.name",
+        color="Net Kâr",
+        color_continuous_scale="Greens",
+        labels={"Net Kâr": "₺"},
+        hover_name="il"
+    )
+    fig_kar.update_geos(fitbounds="locations", visible=False)
+    fig_kar.update_layout(
+        margin=dict(l=0, r=0, t=30, b=0),
+        dragmode=False,
+        paper_bgcolor='rgba(0,0,0,0)',
+        geo=dict(
+            bgcolor='rgba(0,0,0,0)',
+            projection_scale=9,
+            center={"lat": 39.0, "lon": 35.0}
+        ),
+        coloraxis_colorbar=dict(
+            thickness=10,
+            len=0.6,
+            title="₺"
+        )
+    )
+
+    st.plotly_chart(fig_kar, use_container_width=True)
 
 # 📊 Mağaza - Pazaryeri Özeti
-st.markdown("### 🧾 Mağaza & Pazaryeri Satış Özeti")
+# st.markdown("### 🧾 Mağaza & Pazaryeri Satış Özeti")
 
 # Tüm mağazaların sabit listesi (veri olmasa bile görünsün)
 tum_magaza_listesi = ["Sporsuit", "LATTE", "Depoba", "İLYAKİ", "AIDA HOME"]
@@ -630,62 +750,177 @@ df_multi_reset.columns = pd.MultiIndex.from_tuples(new_columns)
 numeric_cols = df_multi_reset.select_dtypes(include='number').columns
 
 # 4. Stil ve render
-html_table = (
-    df_multi_reset.style
-    .format({col: "{:,.2f}" for col in numeric_cols})
-    .set_table_styles([
-        {
-            'selector': 'thead th',
-            'props': [
-                ('text-align', 'center'),
-                ('vertical-align', 'middle'),
-                ('font-size', '13px'),
-                ('padding', '4px'),
-                ('border-bottom', '1px solid #ccc')
-            ]
-        },
-        {
-            'selector': 'tbody td',
-            'props': [
-                ('text-align', 'center'),
-                ('font-size', '13px'),
-                ('padding', '4px')
-            ]
-        }
-    ])
-    .set_properties(**{'text-align': 'center'})
-    .to_html(index=False)
-)
-
-# 5. CSS ve tabloyu bastır
-st.markdown(f"""
+# Küçültülmüş multiselect kutusu için stil ekleyelim
+st.markdown("""
 <style>
-table {{
-    border-collapse: collapse;
-    width: 100%;
-}}
+    /* Mağaza seçim kutusu genişliğini küçült */
+    div[data-baseweb="select"] > div {
+        max-width: 300px;
+    }
 
-th, td {{
-    padding: 4px;
-    white-space: nowrap;
-    text-align: center;
-}}
+    /* Pivot tablonun kapsayıcısı yatay scroll'u kaldır */
+    div[data-testid="stDataFrame"] > div {
+        overflow-x: hidden !important;
+    }
 
-thead th {{
-    font-weight: bold;
-    vertical-align: middle;
-}}
+    /* Tablo hücrelerini sıkıştır, satırda taşmayı engelle */
+    table {
+        table-layout: fixed !important;
+        width: 100% !important;
+        word-wrap: break-word !important;
+        white-space: normal !important;
+    }
 
-.block-container {{
-    padding-top: 0.5rem;
-}}
+    th, td {
+        padding: 4px 8px !important;
+        text-align: center !important;
+        vertical-align: middle !important;
+    }
 </style>
-
-{html_table}
 """, unsafe_allow_html=True)
 
-# GRAFİKLER
+# --- Multiselect ve pivot tablonun gösterimi aynı kodun içinde ---
+# st.markdown("### 🧾 Mağaza Seçimi ve Detaylı Satış Özeti")
+#
+# df = df_multi_reset.copy()
+# magazalar = df["Mağaza"].tolist()
+#
+# secili_magazalar = st.multiselect("Mağaza Seçiniz", options=magazalar, default=magazalar[:1])
+#
+# if secili_magazalar:
+#     st.markdown(f"#### Seçilen Mağazalar: {', '.join([m.title() for m in secili_magazalar])}")
+#
+#     satirlar = df_multi.loc[secili_magazalar]
+#
+#     col_sums = satirlar.sum(axis=0)
+#     cols_to_keep = [col for col in satirlar.columns if col_sums[col] != 0]
+#
+#     satirlar_filtered = satirlar.loc[:, cols_to_keep]
+#
+#     df_to_show = satirlar_filtered.reset_index()
+#
+#     # Index sütununu kaldır (0,1,2 yerine)
+#     df_to_show_reset = df_to_show.reset_index(drop=True)
+#
+#     # “Mağaza” sütununu başa al
+#     cols = df_to_show_reset.columns.tolist()
+#     if "Mağaza" in cols:
+#         cols.insert(0, cols.pop(cols.index("Mağaza")))
+#         df_to_show_reset = df_to_show_reset[cols]
+#
+#     numeric_cols = df_to_show_reset.select_dtypes(include=['number']).columns
+#     df_to_show_reset[numeric_cols] = df_to_show_reset[numeric_cols].apply(pd.to_numeric, errors='coerce').round(2)
+#
+#     styled = df_to_show_reset.style
+#     for col in numeric_cols:
+#         styled = styled.format({col: "{:,.2f}"})
+#
+#     df_to_show_reset = df_to_show.reset_index(drop=True)
+#
+#     styled = styled.format(na_rep="").set_properties(**{
+#         'background-color': '#0c1022',
+#         'color': '#ffffff',
+#         'border-color': '#444444',
+#         'font-family': 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
+#         'font-size': '13px',
+#         'text-align': 'center'
+#     })
+#     html = styled.to_html()
+#
+#     st.dataframe(styled, use_container_width=True)
 
+# --- Multiselect ve pivot tablonun gösterimi aynı kodun içinde ---
+
+
+
+st.markdown("### 🧾 Mağaza Seçimi ve Detaylı Satış Özeti")
+
+# 1️⃣ Veri hazırlığı
+df = df_multi_reset.copy()
+
+# Eğer index "Mağaza" ise sütuna çevir
+if df.index.name == "Mağaza":
+    df = df.reset_index()
+
+# Mağazaları al
+magazalar = df["Mağaza"].unique().tolist()
+
+# 2️⃣ Kullanıcı seçimi
+secili_magazalar = st.multiselect("Mağaza Seçiniz", options=magazalar, default=magazalar[:1])
+
+if secili_magazalar:
+    st.markdown(f"#### Seçilen Mağazalar: {', '.join([str(m).title() for m in secili_magazalar])}")
+
+    # 3️⃣ Seçilen mağazalara göre filtrele
+    satirlar = df[df["Mağaza"].isin(secili_magazalar)]
+
+    # 4️⃣ Sabit kolon listesi (veri olmasa bile gösterilecek)
+    tum_kolonlar = [
+        ('Amazon', 'Satış'), ('Amazon', 'Gider'), ('Amazon', 'Kar'),
+        ('Trendyol', 'Satış'), ('Trendyol', 'Gider'), ('Trendyol', 'Kar'),
+        ('PrestaShop', 'Satış'), ('PrestaShop', 'Gider'), ('PrestaShop', 'Kar'),
+        ('Hepsiburada', 'Satış'), ('Hepsiburada', 'Gider'), ('Hepsiburada', 'Kar'),
+        ('N11', 'Satış'), ('N11', 'Gider'), ('N11', 'Kar'),
+        ('Toplam', 'Satış'), ('Toplam', 'Gider'), ('Toplam', 'Kar')
+    ]
+
+    # 5️⃣ Pivot görünüm için index ayarla
+    satirlar.set_index("Mağaza", inplace=True)
+
+    # Eksik kolonları ekle ve 0.0 olarak doldur
+    for col in tum_kolonlar:
+        if col not in satirlar.columns:
+            satirlar[col] = 0.0
+
+    # Kolon sırasını sabitle
+    satirlar = satirlar.reindex(columns=tum_kolonlar)
+
+    # Index resetle ve yeni tablo hazırla
+    df_to_show = satirlar.reset_index()
+
+    # 6️⃣ Sayısal sütunları yuvarla (formatı gerçekten uygula)
+    numeric_cols = df_to_show.select_dtypes(include=['number']).columns
+    df_to_show[numeric_cols] = df_to_show[numeric_cols].apply(lambda x: x.round(2))
+
+    # 7️⃣ Streamlit'te doğrudan göster
+    st.dataframe(df_to_show, use_container_width=True)
+
+
+st.markdown("""
+<style>
+/* Sayfa genel scroll davranışını engelle */
+html, body {
+    overflow-y: hidden !important;
+    height: 100% !important;
+}
+
+/* DataFrame bileşeninin scroll yapmasını engelle */
+div[data-testid="stDataFrame"] {
+    max-height: none !important;
+    overflow: hidden !important;
+}
+
+/* İç kapsayıcılar da scroll yapmasın */
+div[data-testid="stDataFrame"] > div {
+    overflow: hidden !important;
+    max-height: none !important;
+}
+
+/* Hücre ve tablo düzeni */
+table {
+    table-layout: fixed !important;
+    width: 100% !important;
+    word-wrap: break-word !important;
+}
+th, td {
+    padding: 4px 8px !important;
+    font-size: 14px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# GRAFİKLER
 
 st.markdown("### 📈 Günlük Ciro & Net Kâr")
 
@@ -812,10 +1047,17 @@ urunler_df.columns = [
     for c in urunler_df.columns
 ]
 
-urunler_df["stok"] = pd.to_numeric(urunler_df["stok"], errors="coerce").fillna(0)
+if "Stok" in urunler_df.columns:
+    urunler_df["stok"] = urunler_df["Stok"].astype(str).str.replace(",", ".").str.strip()
+    urunler_df["stok"] = pd.to_numeric(urunler_df["stok"], errors="coerce").fillna(0)
 
-stokta_olmayan_sayi = (urunler_df["stok"] <= 0).sum()
-kritik_stok_sayi = (urunler_df["stok"] <= 1).sum()
+    stokta_olmayan_sayi = (urunler_df["stok"] <= 0).sum()
+    kritik_stok_sayi = (urunler_df["stok"] <= 1).sum()
+else:
+    # st.warning("⚠️ 'Stok' kolonu bulunamadı, stok kontrolü atlandı.")
+    stokta_olmayan_sayi = 0
+    kritik_stok_sayi = 0
+
 
 st.markdown("### 📦 Stok Durumu Özeti")
 col_stok1, col_stok2 = st.columns(2)
