@@ -16,6 +16,31 @@ st.set_page_config(page_title="Satış Dashboard", layout="wide")
 
 st.markdown("""
 <style>
+section[data-testid="stSidebar"] .stMultiSelect div[data-baseweb="tag"] {
+    background-color: #0c1022 !important;
+    border: 1px solid #00c3ff !important;
+    border-radius: 5px;
+    padding: 6px 10px;
+    font-size: 13px;
+    margin: 4px 4px 4px 0;
+    color: white !important;
+    font-weight: 500;
+}
+
+/* X butonunu küçük yap ve hizala */
+section[data-testid="stSidebar"] .stMultiSelect div[data-baseweb="tag"] button {
+    background-color: transparent !important;
+    color: #ff7675 !important;
+    font-weight: bold;
+    margin-left: 6px;
+}
+
+/* Seçili kutulara hover efekti */
+section[data-testid="stSidebar"] .stMultiSelect div[data-baseweb="tag"]:hover {
+    background-color: #1f2c3f !important;
+    border-color: #00c3ff !important;
+}
+
 label.css-1w0j46c, label.css-1y4p8pa { 
     font-size: 15px !important;
     color: #ecf0f1 !important;
@@ -23,23 +48,22 @@ label.css-1w0j46c, label.css-1y4p8pa {
 }
 .st-emotion-cache-tj3uvl {
     padding: 0px calc(2px + 1rem) 19rem;
-    margin-top: -13%;
-}
-.st-dh {
-    border-bottom-color: rgba(0, 0, 0, 0.75);
-}
-.st-dg {
-    border-top-color: rgba(0, 0, 0, 0.75);
-}
-
-.st-df {
-    border-right-color: rgba(0, 0, 0, 0.75);
-}
-.st-av {
-    background-color: rgba(0, 0, 0, 0.75);
+    margin-top: -51%;
 }
 .st-de {
-    border-left-color: rgba(0, 0, 0, 0.75);
+    border-left-color: #0c1022 !important;
+}
+.st-av {
+    background-color: #0c1022 !important;
+}
+.st-df {
+    border-right-color: #0c1022 !important;
+}
+.st-dg {
+    border-top-color: #0c1022 !important;
+}
+.st-dh {
+    border-bottom-color: #0c1022 !important;
 }
 /* Sidebar arka planı ve genel yazı rengi */
 section[data-testid="stSidebar"] > div:first-child {
@@ -161,7 +185,7 @@ div[data-baseweb="radio"] input[type="radio"]:checked + div::before {
 .st-h5::after,
 .st-h6::after,
 .st-ci,
-.st-cf,
+.st-cf,f
 .st-cg,
 .st-ch {
     border-color: #000000 !important;
@@ -420,15 +444,9 @@ with st.sidebar:
                                   key="sidebar_ay")
 
         donem = f"{secilen_yil}-{aylar[ay_isimleri.index(secilen_ay)]:02d}"
-
-
-    # ---------------- Firma Checkbox 2'li ----------------
-    st.markdown("### 🏢 Firma Seçiniz")
-
-    verideki_magazalar = df["magaza_normalized"].dropna().unique().tolist()
-    sabit_magazalar = ["sporsuit", "latte", "depoba", "ilyaki", "aida home", "perakende"]
-    tum_magazalar = sorted(set(verideki_magazalar + sabit_magazalar))
-
+    # ---------------- Mağaza Checkbox (Pazaryerinin Altında) ----------------
+    st.markdown("### 🏬 Mağaza Seçiniz")
+    tum_magazalar = ["sporsuit", "latte", "depoba", "ilyaki", "aida home", "perakende"]
     secilen_magazalar = []
     cols = st.columns(2)
     for i, magaza in enumerate(tum_magazalar):
@@ -449,6 +467,17 @@ with st.sidebar:
             if st.checkbox(pazar, value=True, key=f"pazaryeri_{pazar}"):
                 secilen_pazaryerleri.append(pazar)
 
+    # --- Sidebar: Pivot tablo için mağaza filtresi ---
+    st.markdown("### 🧾 Pivot Mağaza Seçiniz")
+
+    tum_pivot_magazalar = ["sporsuit", "latte", "depoba", "ilyaki", "aida home","perakende"]
+    secili_magazalar = []
+    cols = st.columns(2)
+    for i, magaza in enumerate(tum_pivot_magazalar):
+        col = cols[i % 2]
+        with col:
+            if st.checkbox(magaza.title(), value=True, key=f"pivot_magaza_{magaza}"):
+                secili_magazalar.append(magaza)
 df.columns = [c.strip().lower().replace(" ", "_").replace("-", "_")
               .replace("ç", "c").replace("ş", "s").replace("ğ", "g")
               .replace("ü", "u").replace("ı", "i").replace("ö", "o") for c in df.columns]
@@ -846,7 +875,7 @@ if df.index.name == "Mağaza":
 magazalar = df["Mağaza"].unique().tolist()
 
 # 2️⃣ Kullanıcı seçimi
-secili_magazalar = st.multiselect("Mağaza Seçiniz", options=magazalar, default=magazalar[:1])
+# secili_magazalar = st.multiselect("Mağaza Seçiniz", options=magazalar, default=magazalar[:1])
 
 if secili_magazalar:
     st.markdown(f"#### Seçilen Mağazalar: {', '.join([str(m).title() for m in secili_magazalar])}")
