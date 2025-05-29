@@ -1,8 +1,12 @@
 streamlit
 pandas
-sqlalchemy
-pymysql
-openpyxl
+numpy
 altair
 plotly
 geopandas
+matplotlib
+sqlalchemy
+pymysql
+openpyxl
+unicodedata2
+st-aggrid
