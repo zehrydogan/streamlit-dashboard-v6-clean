@@ -9,7 +9,6 @@ import plotly.express as px
 import numpy as np
 import plotly.graph_objects as go
 from matplotlib.colors import to_rgb
-from st_aggrid import AgGrid, GridOptionsBuilder
 
 
 

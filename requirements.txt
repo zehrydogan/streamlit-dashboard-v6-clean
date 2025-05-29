@@ -9,4 +9,3 @@ sqlalchemy
 pymysql
 openpyxl
 unicodedata2
-st-aggrid
