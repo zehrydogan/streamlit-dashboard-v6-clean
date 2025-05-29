@@ -574,6 +574,7 @@ metrics = [
     {"label": "Kargo", "value": df_filtered["satir_kargo_fiyat"].sum()}
 ]
 
+
 if metrics:
     global_max = max(m["value"] for m in metrics if any(x in m["label"].lower() for x in ["kâr", "komisyon", "ciro", "kargo", "maliyet", "tutar"]))
     global_max_adet = max((m["value"] for m in metrics if not any(x in m["label"].lower() for x in ["kâr", "komisyon", "ciro", "kargo", "maliyet", "tutar"])), default=25)
@@ -1057,8 +1058,20 @@ else:
     stokta_olmayan_sayi = 0
     kritik_stok_sayi = 0
 
-
+# 🎯 Stok durumu metriklerini renkli yuvarlak gösterge ile göster
 st.markdown("### 📦 Stok Durumu Özeti")
+
+stok_colors = ("#ff6b6b", "#ffa502")  # Kırmızıdan turuncuya geçiş
+stok_max = max(stokta_olmayan_sayi, kritik_stok_sayi, 20)
+
 col_stok1, col_stok2 = st.columns(2)
-col_stok1.metric("🛑 Stokta Olmayan Ürün", stokta_olmayan_sayi)
-col_stok2.metric("⚠️ Kritik Stok (<=1)", kritik_stok_sayi)
+with col_stok1:
+    st.plotly_chart(
+        plot_gauge_gradient(stokta_olmayan_sayi, "🛑 Stokta Yok", stok_colors, stok_max, adet_max=stok_max),
+        use_container_width=True
+    )
+with col_stok2:
+    st.plotly_chart(
+        plot_gauge_gradient(kritik_stok_sayi, "⚠️ Kritik Stok (<=1)", stok_colors, stok_max, adet_max=stok_max),
+        use_container_width=True
+    )
