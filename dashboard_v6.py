@@ -875,8 +875,6 @@ if df.index.name == "Mağaza":
 magazalar = df["Mağaza"].unique().tolist()
 
 # 2️⃣ Kullanıcı seçimi
-# secili_magazalar = st.multiselect("Mağaza Seçiniz", options=magazalar, default=magazalar[:1])
-
 if secili_magazalar:
     st.markdown(f"#### Seçilen Mağazalar: {', '.join([str(m).title() for m in secili_magazalar])}")
 
@@ -911,8 +909,15 @@ if secili_magazalar:
     numeric_cols = df_to_show.select_dtypes(include=['number']).columns
     df_to_show[numeric_cols] = df_to_show[numeric_cols].apply(lambda x: x.round(2))
 
-    # 7️⃣ Streamlit'te doğrudan göster
+    # 7️⃣ Sayıları daha okunaklı hale getirmek için formatla
+    for col in numeric_cols:
+        df_to_show[col] = df_to_show[col].apply(lambda x: f"{x:,.2f}")
+
+    # 8️⃣ Streamlit'te doğrudan göster
     st.dataframe(df_to_show, use_container_width=True)
+    # 9️⃣ Toplam Karı Hesapla ve Göster
+    toplam_kar = satirlar[('Toplam', 'Kar')].sum()
+    st.markdown(f"### 💰 Toplam Kar: {toplam_kar:,.2f} TL")
 
 
 st.markdown("""
