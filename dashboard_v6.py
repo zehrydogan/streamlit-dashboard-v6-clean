@@ -258,36 +258,33 @@ def normalize_magaza(s):
         return s
 
 def interpolate_colors(start_hex, end_hex, n):
+    if n <= 0:
+        return []
     start_rgb = np.array(to_rgb(start_hex))
     end_rgb = np.array(to_rgb(end_hex))
     return [f'rgb({int(r*255)}, {int(g*255)}, {int(b*255)})'
             for r, g, b in np.linspace(start_rgb, end_rgb, n)]
 
 
-def plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25):
-    # Maksimum değeri belirle
+
+def plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25, total_slices=50):
     if any(x in label.lower() for x in ["kâr", "komisyon", "ciro", "kargo", "maliyet", "tutar"]):
         max_val = global_max if global_max > 0 else 1
     else:
         max_val = min(adet_max, global_max * 1.1) if global_max > 0 else adet_max
 
     percentage = (value / max_val) * 100 if max_val != 0 else 0
-
-    # Gradient geçiş için dilimleri oluştur
-    total_slices = 50
-    filled_slices = int((percentage / 100) * total_slices)
+    filled_slices = max(0, int((percentage / 100) * total_slices))
     empty_slices = total_slices - filled_slices
 
     gradient_colors = interpolate_colors(base_colors[0], base_colors[1], filled_slices)
     pie_colors = gradient_colors + ["#2c3e50"] * empty_slices
 
-    # Değer formatlama
     if any(x in label.lower() for x in ["kâr", "komisyon", "ciro", "kargo", "maliyet", "tutar"]):
         formatted_value = f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".") + " ₺"
     else:
         formatted_value = f"{int(value):,}".replace(",", ".") + " adet"
 
-    # Grafik oluştur
     fig = go.Figure()
     fig.add_trace(go.Pie(
         values=[1] * total_slices,
@@ -296,7 +293,7 @@ def plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25):
         sort=False,
         marker=dict(colors=pie_colors, line=dict(color="#0c1022", width=1)),
         textinfo='none',
-        hoverinfo = 'skip'
+        hoverinfo='skip'
     ))
 
     fig.update_layout(
@@ -311,6 +308,8 @@ def plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25):
         )]
     )
     return fig
+
+
 
 @st.cache_data(show_spinner=False)
 def cached_plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25, total_slices=30):
