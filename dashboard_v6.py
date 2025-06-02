@@ -262,6 +262,21 @@ header[data-testid="stHeader"] { margin-top: -5%; }
         margin-left: auto;   /* sağa yasla */
         margin-top: 4px;     /* gauge ile arasında boşluk */
     }
+/* Dark arka-plan + primary renklere ince ayar  */
+    .stApp { background-color:#0c1222; color:#FFFFFF; }
+    /* Segmeli radyo butonlarını "toggle" gibi göster */
+    div[data-baseweb="radio"] > div { flex-direction:row; }
+    div[data-baseweb="radio"] label span {
+        background:#132138; padding:4px 18px; border-radius:6px; margin-right:6px;
+        font-weight:600; color:#d0d0d0; cursor:pointer;
+        transition:all .2s ease-in-out;
+    }
+    /* Seçili durum: beyaz zemin koyu metin  */
+    div[data-baseweb="radio"] input:checked + label span {
+        background:#FFFFFF; color:#0c1222;
+    }
+    /* Plotly renk çubuğunu ince gösterelim */
+    .js-plotly-plot .colorbar { width:10px!important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -913,70 +928,64 @@ for row in rows:
 
 
 # -------------------- HARİTALARI YAN YANA VE ZOOM KAPALI --------------------
-st.markdown("### 🌍 İl Bazında Ciro ve Kâr Dağılımı")
+st.title("🌍 İl Bazında Ciro ve Kâr Dağılımı")
 
-col1, col2 = st.columns(2)
+metric = st.radio(
+    "Harita türünü seçin:",
+    ["Ciro", "Kâr"],
+    horizontal=True
+)
 
-with col1:
-    st.subheader("📊 Ciro Haritası")
-    fig_ciro = px.choropleth(
-        il_ozet,
-        geojson=turkiye_geojson,
-        featureidkey="properties.name",
-        locations="il",
-        color="Toplam Ciro",
-        color_continuous_scale="Blues",
-        labels={"Toplam Ciro": "₺"},
-    )
-    fig_ciro.update_geos(fitbounds="locations", visible=False)
-    fig_ciro.update_layout(
-        margin=dict(l=0, r=0, t=30, b=0),
-        dragmode=False,
-        paper_bgcolor='rgba(0,0,0,0)',
-        geo=dict(
-            bgcolor='rgba(0,0,0,0)',
-            projection_scale=9,
-            center={"lat": 39.0, "lon": 35.0}
-        ),
-        coloraxis_colorbar=dict(
-            thickness=10,
-            len=0.6,
-            title="₺"
-        )
-    )
+# Seçime göre kolon adı ve renk skalası
+if metric == "Ciro":
+    color_col   = "Toplam Ciro"   # il_ozet’teki ciro sütunu
+    color_scale = "Blues"
+else:
+    color_col   = "Net Kâr"       # il_ozet’teki kâr sütunu
+    color_scale = "Greens"
 
-    st.plotly_chart(fig_ciro, use_container_width=True)
+# --------------------------------------------------------
+# PLOTLY CHOROPLETH HARİTA
+# --------------------------------------------------------
+# "Sipariş" yoksa sözlükten çıkar
+hover_dict = {
+    "Toplam Ciro": ":,.0f ₺",
+    "Net Kâr":     ":,.0f ₺",
+    # "Sipariş":   ":,.0f adet",   # ← kolon henüz yok
+}
+fig = px.choropleth(
+    il_ozet,
+    geojson=turkiye_geojson,
+    featureidkey="properties.name",
+    locations="il",
+    color=color_col,
+    color_continuous_scale=color_scale,
+    hover_name="il",
+    hover_data=hover_dict,
+)
 
-with col2:
-    st.subheader("📈 Net Kâr Haritası")
-    fig_kar = px.choropleth(
-        il_ozet,
-        geojson=turkiye_geojson,
-        locations="il",
-        featureidkey="properties.name",
-        color="Net Kâr",
-        color_continuous_scale="Greens",
-        labels={"Net Kâr": "₺"},
-        hover_name="il"
-    )
-    fig_kar.update_geos(fitbounds="locations", visible=False)
-    fig_kar.update_layout(
-        margin=dict(l=0, r=0, t=30, b=0),
-        dragmode=False,
-        paper_bgcolor='rgba(0,0,0,0)',
-        geo=dict(
-            bgcolor='rgba(0,0,0,0)',
-            projection_scale=9,
-            center={"lat": 39.0, "lon": 35.0}
-        ),
-        coloraxis_colorbar=dict(
-            thickness=10,
-            len=0.6,
-            title="₺"
-        )
-    )
+fig.update_geos(fitbounds="locations", visible=False)
+fig.update_layout(
+    margin=dict(l=0, r=0, t=0, b=0),
+    dragmode=False,
+    paper_bgcolor="rgba(0,0,0,0)",
+    geo=dict(
+        bgcolor="rgba(0,0,0,0)",
+        projection_scale=9,
+        center={"lat": 38.9, "lon": 35.1},
+    ),
+    coloraxis_colorbar=dict(
+        title="₺",
+        len=0.75,
+        thickness=10,
+        outlinewidth=0,
+    ),
+)
 
-    st.plotly_chart(fig_kar, use_container_width=True)
+# --------------------------------------------------------
+# HARİTAYI GÖSTER
+# --------------------------------------------------------
+st.plotly_chart(fig, use_container_width=True)
 
 # 📊 Mağaza - Pazaryeri Özeti
 # st.markdown("### 🧾 Mağaza & Pazaryeri Satış Özeti")
