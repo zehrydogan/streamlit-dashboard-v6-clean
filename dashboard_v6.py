@@ -48,7 +48,7 @@ label.css-1w0j46c, label.css-1y4p8pa {
 }
 .st-emotion-cache-tj3uvl {
     padding: 0px calc(2px + 1rem) 19rem;
-    margin-top: -14%;
+    margin-top: -20%;
 }
 .st-de {
     border-left-color: #0c1022 !important;
@@ -331,28 +331,25 @@ def interpolate_colors(start_hex, end_hex, n):
     return [f'rgb({int(r*255)}, {int(g*255)}, {int(b*255)})'
             for r, g, b in np.linspace(start_rgb, end_rgb, n)]
 
-
-
+# plot_gauge_gradient fonksiyonunda değişiklik (yaklaşık satır 250)
 def plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25, total_slices=50):
-    if any(x in label.lower() for x in ["kâr", "komisyon", "ciro", "kargo", "maliyet", "tutar"]):
-        max_val = global_max if global_max > 0 else 1
-    else:
-        max_val = min(adet_max, global_max * 1.1) if global_max > 0 else adet_max
-
+    is_tutar = any(x in label.lower() for x in ["kâr", "komisyon", "ciro", "kargo"])
+    max_val = global_max if is_tutar else min(adet_max, global_max * 1.1)
     percentage = (value / max_val) * 100 if max_val != 0 else 0
     filled_slices = max(0, int((percentage / 100) * total_slices))
     empty_slices = total_slices - filled_slices
-
     gradient_colors = interpolate_colors(base_colors[0], base_colors[1], filled_slices)
     pie_colors = gradient_colors + ["#2c3e50"] * empty_slices
 
-    if any(x in label.lower() for x in ["kâr", "komisyon", "ciro", "kargo", "maliyet", "tutar"]):
-        formatted_value = f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".") + " ₺"
+    # YENİ FORMATLAMA (Türkçe para formatı)
+    if is_tutar:
+        # Binlik ayraç: nokta, ondalık: virgül, 2 basamak
+        formatted_value = "{:,.2f} ₺".format(value).replace(",", "X").replace(".", ",").replace("X", ".")
     else:
-        formatted_value = f"{int(value):,}".replace(",", ".") + " adet"
+        # Adetler için sadece binlik ayraç nokta
+        formatted_value = "{:,} adet".format(int(value)).replace(",", ".")
 
-    fig = go.Figure()
-    fig.add_trace(go.Pie(
+    fig = go.Figure(go.Pie(
         values=[1] * total_slices,
         hole=0.75,
         direction='clockwise',
@@ -361,28 +358,24 @@ def plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25, tota
         textinfo='none',
         hoverinfo='skip'
     ))
-
     fig.update_layout(
-        paper_bgcolor="#0c1022",
-        margin=dict(l=0, r=0, t=5, b=5),
-        height=160,
-        width=160,
         showlegend=False,
+        margin=dict(t=0, b=0, l=0, r=0),
+        height=160, width=160,
+        paper_bgcolor="#0c1022",
         annotations=[dict(
             text=f'<b>{formatted_value}</b><br><span style="font-size:13px; color:#aaa">{label}</span>',
-            x=0.5, y=0.5, font_size=13, showarrow=False
+            x=0.5, y=0.5, showarrow=False
         )]
     )
-
     return fig
-
 
 @st.cache_data(show_spinner=False)
 def cached_plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25, total_slices=30):
     return plot_gauge_gradient(value, label, base_colors, global_max, adet_max, total_slices)
 
-df = pd.read_excel("Mayis_Siparisler.xlsx")
-df["siparis_tarihi"] = pd.to_datetime(df["Sip. Tarihi"], errors="coerce")
+df = pd.read_excel("Haziran_Siparisler.xlsx")
+df["siparis_tarihi"] = pd.to_datetime(df["Sip. Tarihi"], format="%d.%m.%Y %H:%M", errors="coerce")
 # ✅ ŞU SATIRI EKLE (manuel düzeltme)
 
 df.columns = [
@@ -412,7 +405,7 @@ df["magaza_normalized"] = df["magaza"].apply(normalize_magaza)
 
 # -------------------- İADELER --------------------
 # Sütun isimlerini normalize edelim
-iade_df = pd.read_excel("Mayis_Iadeler.xlsx")
+iade_df = pd.read_excel("Haziran_Iadeler.xlsx")
 
 
 iade_df.columns = [
@@ -488,7 +481,7 @@ with st.sidebar:
     # ---------------- Pazaryeri Checkbox 2'li ----------------
     st.markdown("### 🛍️ Pazaryeri Seçiniz")
 
-    tum_pazaryerleri = ["Amazon", "Trendyol", "PrestaShop", "Hepsiburada", "N11", "Perakende"]
+    tum_pazaryerleri = ["Amazon", "Trendyol", "PrestaShop", "HepsiBurada", "N11", "PraPazar"]
     secilen_pazaryerleri = []
     cols = st.columns(2)
     for i, pazar in enumerate(tum_pazaryerleri):
@@ -508,13 +501,27 @@ if filtre_tipi == "Tarih Aralığı":
         (df["siparis_tarihi"].dt.date >= baslangic) &
         (df["siparis_tarihi"].dt.date <= bitis)
     ]
-    iade_df = iade_df[
-        (iade_df["siparis_tarihi"] >= baslangic) &
-        (iade_df["siparis_tarihi"] <= bitis)
-    ]
+    df_filtered = df_filtered[[
+        "siparis_no", "stok_kodu", "satr_fiyat", "kar", "fatura_il",
+        "siparis_tarihi", "magaza_normalized", "pazaryeri",
+        "satr_komisyon", "satr_kargo_fiyat", "siparis_satir_durumu",
+        "key"
+    ]]
+
+    # Düzeltilmiş hali (filtrelenmiş veriye göre iadeler):
+    iade_df = iade_df[iade_df["key"].isin(df_filtered["key"])]  # Sadece filtreli siparişlerdeki iadeler
+    iade_sayisi = len(iade_df)
+
 else:
     donem = f"{secilen_yil}-{aylar[ay_isimleri.index(secilen_ay)]:02d}"
     df_filtered = df[df["siparis_tarihi"].dt.strftime("%Y-%m") == donem]
+    df_filtered = df_filtered[[
+        "siparis_no", "stok_kodu", "satr_fiyat", "kar", "fatura_il",
+        "siparis_tarihi", "magaza_normalized", "pazaryeri",
+        "satr_komisyon", "satr_kargo_fiyat", "siparis_satir_durumu",
+        "key"
+    ]]
+
     iade_df = iade_df[
         iade_df["siparis_tarihi"].apply(lambda d: d.strftime("%Y-%m") == donem if pd.notnull(d) else False)
     ]
@@ -546,6 +553,10 @@ def temizle_sayisal_kolon(df, kolon_adi):
 for kolon in sayisal_kolonlar:
     df_filtered = temizle_sayisal_kolon(df_filtered, kolon)
 
+# 🔧 Ham veri için de kargo sütununu dönüştür
+df = temizle_sayisal_kolon(df, "satr_kargo_fiyat")
+
+
 # Kar hesapla
 df_filtered["kar"] = (
     df_filtered["satr_fiyat"]
@@ -568,19 +579,6 @@ il_ozet = df_filtered.groupby("fatura_il").agg({
     "satr_fiyat": "Toplam Ciro",
     "kar": "Net Kâr"
 })
-# Eksik illeri sıfır değerle dataframe'e ekle
-geo_iller = [feature["properties"]["name"] for feature in turkiye_geojson["features"]]
-mevcut_iller = il_ozet["il"].tolist()
-eksik_iller = list(set(geo_iller) - set(mevcut_iller))
-
-eksik_df = pd.DataFrame({
-    "il": eksik_iller,
-    "Toplam Ciro": 0,
-    "Net Kâr": 0
-})
-
-il_ozet = pd.concat([il_ozet, eksik_df], ignore_index=True)
-
 
 
 # --------------------
@@ -595,7 +593,7 @@ df["magaza_normalized"] = df["magaza"].apply(normalize_magaza)
 
 # 🔢 Sipariş Türleri
 # 🔢 Sipariş Türleri
-toplam_siparis = len(df_filtered)
+toplam_siparis = df_filtered["siparis_no"].astype(str).count()
 
 # İptal sayısı (filtreli veri üzerinden)
 # YENİ KODLAR (EKLEYİN)
@@ -618,7 +616,7 @@ iade_sayisi = len(iade_df)
 
 # Aktif siparişleri doğrudan filtreleyerek hesapla
 # Yöntem 1: Toplam - (İptal + İade)
-aktif_siparis = len(df_filtered) - iptal_sayisi - iade_sayisi
+aktif_siparis  = toplam_siparis - iptal_sayisi - iade_sayisi
 
 # Yöntem 2: Direkt filtreleme (durum = "aktif" VE iade/iptal değil)
 aktif_df = df_filtered[
@@ -633,8 +631,8 @@ base_colors = ("#00b2ff", "#00ffb3")
 
 # 3. METRİKLERİ GÜNCELLE (FİLTRELENMİŞ VERİYLE)
 metric_cards = [
-    {"label": "Toplam Sipariş", "value": len(df_filtered)},  # Filtrelenmiş veri
-    {"label": "Aktif Sipariş", "value": len(df_filtered) - iptal_sayisi - iade_sayisi},
+    {"label": "Toplam Sipariş", "value": df_filtered["siparis_no"].astype(str).count()},
+    {"label": "Aktif Sipariş", "value": df_filtered["siparis_no"].astype(str).count() - iptal_sayisi - iade_sayisi},
     {"label": "İade", "value": iade_sayisi},
     {"label": "İptal", "value": iptal_sayisi},
     {"label": "Toplam Ciro", "value": df_filtered["satr_fiyat"].sum()},
@@ -889,15 +887,18 @@ def draw_metric_detail_v2(df_filtered, label, iade_df=None):
 
 
 # ───────── Gauge + Expander Döngüsü ─────────
-global_max       = max(m["value"] for m in metric_cards if any(x in m["label"].lower()
-                               for x in ["kâr", "komisyon", "ciro", "kargo"]))
+global_max = max([
+    df_filtered["satr_fiyat"].sum(),
+    df_filtered["kar"].sum(),
+    df_filtered["satr_komisyon"].sum(),
+    df_filtered["satr_kargo_fiyat"].sum()  # <-- Filtrelenmiş veri kullan
+])
 global_max_adet  = max(m["value"] for m in metric_cards if not any(x in m["label"].lower()
                                for x in ["kâr", "komisyon", "ciro", "kargo"]))
 
 # ───────── Gauge + Expander Döngüsü (yeni düzen) ─────────
 # her satır 4 metrik: (gauge, detay) × 4  →   toplam 8 sütun
 rows = [metric_cards[:4], metric_cards[4:]]
-
 
 for row in rows:
     # Her gauge + detay için iki sütun: solda gauge, sağda detay
@@ -907,27 +908,35 @@ for row in rows:
         col_left = cols[i * 2]      # Gauge grafik
         col_right = cols[i * 2 + 1] # Detay grafikler
 
+        label = metric["label"]
+        value = metric["value"]
+
+        # Eğer "Kargo" ise farklı maksimum kullan
+        if label.lower() == "kargo":
+            local_max = df["satr_kargo_fiyat"].sum() * 1.2  # %20 boşluk bırak
+        else:
+            local_max = global_max
+
         with col_left:
             st.plotly_chart(
                 plot_gauge_gradient(
-                    metric["value"], metric["label"],
-                    base_colors, global_max,
+                    value, label,
+                    base_colors, local_max,
                     adet_max=global_max_adet
                 ),
                 use_container_width=True,
-                key=f"gauge_{metric['label']}"
+                key=f"gauge_{label}"
             )
 
-            # Butonla detay aç/kapat
-            if st.button(f"🔍 Detay Göster", key=f"btn_{metric['label']}"):
-                if st.session_state.get("aktif_metrik") == metric["label"]:
-                    st.session_state["aktif_metrik"] = None
-                else:
-                    st.session_state["aktif_metrik"] = metric["label"]
-
-        with col_right:
-            if st.session_state.get("aktif_metrik") == metric["label"]:
-                draw_metric_detail_v2(df_filtered, metric["label"], iade_df)
+        #     if st.button(f"🔍 Detay Göster", key=f"btn_{label}"):
+        #         if st.session_state.get("aktif_metrik") == label:
+        #             st.session_state["aktif_metrik"] = None
+        #         else:
+        #             st.session_state["aktif_metrik"] = label
+        #
+        # with col_right:
+        #     if st.session_state.get("aktif_metrik") == label:
+        #         draw_metric_detail_v2(df_filtered, label, iade_df)
 
 # -------------------- HARİTA KISMI --------------------
 st.title("🌍 İl Bazında Ciro ve Kâr Dağılımı")
@@ -938,6 +947,16 @@ metric = st.radio(
     horizontal=True
 )
 
+# Filtrelenmiş veriden il özetini oluştur
+il_ozet = df_filtered.groupby("fatura_il").agg({
+    "satr_fiyat": "sum",
+    "kar": "sum"
+}).reset_index().rename(columns={
+    "fatura_il": "il",
+    "satr_fiyat": "Toplam Ciro",
+    "kar": "Net Kâr"
+})
+
 # İl isimlerini standartlaştır
 il_ozet["il"] = il_ozet["il"].apply(normalize_il_name)
 
@@ -945,14 +964,23 @@ il_ozet["il"] = il_ozet["il"].apply(normalize_il_name)
 if metric == "Ciro":
     color_col = "Toplam Ciro"
     color_scale = "Blues"
+    hover_data = {
+        "Toplam Ciro": True,
+        "Net Kâr": False,
+        "il": False
+    }
 else:
     color_col = "Net Kâr"
     color_scale = "Greens"
+    hover_data = {
+        "Toplam Ciro": False,
+        "Net Kâr": True,
+        "il": False
+    }
 
-# GeoJSON'daki il isimlerini al
+# GeoJSON'daki tüm illeri al
 geo_iller = [feature["properties"]["name"] for feature in turkiye_geojson["features"]]
-
-# Eksik illeri ekle
+# Eksik illeri bul ve 0 değerleriyle ekle
 eksik_iller = list(set(geo_iller) - set(il_ozet["il"]))
 eksik_df = pd.DataFrame({
     "il": eksik_iller,
@@ -960,12 +988,34 @@ eksik_df = pd.DataFrame({
     "Net Kâr": 0
 })
 il_ozet = pd.concat([il_ozet, eksik_df], ignore_index=True)
-# JSON'daki il isimlerini listeleyin
-geo_iller = [feature["properties"]["name"] for feature in turkiye_geojson["features"]]
+
+# Formatlı sütunlar ekleyelim
+il_ozet["Toplam Ciro Formatlı"] = il_ozet["Toplam Ciro"].apply(
+    lambda x: f"{x:,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", ".")
+)
+il_ozet["Net Kâr Formatlı"] = il_ozet["Net Kâr"].apply(
+    lambda x: f"{x:,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", ".")
+)
+
+if metric == "Ciro":
+    hover_data = {
+        "il": False,
+        "Toplam Ciro Formatlı": True,
+        "Net Kâr Formatlı": False,
+        "Toplam Ciro": False,
+        "Net Kâr": False
+    }
+else:
+    hover_data = {
+        "il": False,
+        "Toplam Ciro Formatlı": False,
+        "Net Kâr Formatlı": True,
+        "Toplam Ciro": False,
+        "Net Kâr": False
+    }
 
 
-# Excel'deki benzersiz il isimlerini listeleyin
-# Haritayı oluştur
+# Harita oluşturma kısmını şu şekilde güncelleyin:
 fig = px.choropleth(
     il_ozet,
     geojson=turkiye_geojson,
@@ -974,8 +1024,27 @@ fig = px.choropleth(
     color=color_col,
     color_continuous_scale=color_scale,
     hover_name="il",
-    hover_data={"Toplam Ciro": ":,.0f ₺", "Net Kâr": ":,.0f ₺"}
+    hover_data={
+        "il": False,
+        "Toplam Ciro": False,  # Ham veriyi gizle
+        "Net Kâr": False,      # Ham veriyi gizle
+        "Toplam Ciro Formatlı": True,  # Formatlı versiyonu göster
+        "Net Kâr Formatlı": True       # Formatlı versiyonu göster
+    },
+    custom_data=["Toplam Ciro", "Net Kâr"],  # Hesaplamalar için ham veriyi sakla
+    labels={
+        "Toplam Ciro Formatlı": "Toplam Ciro",
+        "Net Kâr Formatlı": "Net Kâr"
+    }
 )
+
+# Hover template'i manuel olarak ayarla
+fig.update_traces(
+    hovertemplate="<b>%{location}</b><br>" +
+    ("Toplam Ciro: %{customdata[0]:,.2f} ₺<extra></extra>" if metric == "Ciro" else
+     "Net Kâr: %{customdata[1]:,.2f} ₺<extra></extra>")
+)
+
 fig.update_geos(fitbounds="locations", visible=False)
 fig.update_layout(
     margin=dict(l=0, r=0, t=0, b=0),
@@ -1037,7 +1106,7 @@ tum_pazaryerleri = sorted(df["pazaryeri"].unique())
 # # Göster
 # st.dataframe(summary_full, use_container_width=True)
 # 🎯 Pazaryeri ve metrik yapısı
-sabit_pazaryerleri = ["Amazon", "Trendyol", "PrestaShop", "Hepsiburada", "N11", "Perakende"]
+sabit_pazaryerleri = ["Amazon", "Trendyol", "PrestaShop", "HepsiBurada", "N11", "Perakende"]
 metrikler = ["Satış", "Gider", "Kar"]
 magazalar = ["sporsuit", "latte", "depoba", "ilyaki", "aida home"]
 
@@ -1107,6 +1176,7 @@ th, td {
 
 
 # GRAFİKLER
+# GRAFİKLER
 
 st.markdown("### 📈 Günlük Ciro & Net Kâr")
 
@@ -1126,18 +1196,21 @@ daily_melted = daily.melt(
     value_name="Tutar"
 )
 
+# Format the values properly for display
+daily_melted["Tutar_Formatted"] = daily_melted["Tutar"].apply(lambda x: f"{x:,.2f} ₺")
+
 # Altair grafik
 chart = alt.Chart(daily_melted).mark_line(point=True).encode(
-    x=alt.X("Tarih:T", title="Tarih", axis=alt.Axis(format="%d %b", labelAngle=0)),
-    y=alt.Y("Tutar:Q", title="Tutar (₺)"),
+    x=alt.X("yearmonthdate(Tarih):T", title="Tarih", axis=alt.Axis(format="%d %b", labelAngle=0)),
+    y=alt.Y("Tutar:Q", title="Tutar (₺)", axis=alt.Axis(format=",.0f")),
     color=alt.Color("Gösterge:N", title="Gösterge"),
     tooltip=[
-        alt.Tooltip("Tarih:T", title="Tarih", format="%d %B %Y"),
+        alt.Tooltip("yearmonthdate(Tarih):T", title="Tarih", format="%d %B %Y"),
         alt.Tooltip("Gösterge:N", title="Gösterge"),
-        alt.Tooltip("Tutar:Q", title="Tutar (₺)")
+        alt.Tooltip("Tutar_Formatted:N", title="Tutar")  # Use formatted value
     ]
 ).properties(
-    height=400,
+    height=400
 ).configure_axis(
     labelFontSize=12,
     titleFontSize=14
@@ -1145,10 +1218,6 @@ chart = alt.Chart(daily_melted).mark_line(point=True).encode(
     titleFontSize=13,
     labelFontSize=12,
     orient='bottom'
-).configure_title(
-    fontSize=20,
-    anchor='start',
-    font='Segoe UI'
 )
 
 # Streamlit'te düzgün yerleşimle göster
@@ -1261,3 +1330,39 @@ else:
 #         plot_gauge_gradient(kritik_stok_sayi, "⚠️ Kritik Stok (<=1)", stok_colors, stok_max, adet_max=stok_max),
 #         use_container_width=True
 #     )
+
+st.write(f"Ham veri satır sayısı: {len(df)}")
+st.write(f"Filtrelenmiş veri satır sayısı: {len(df_filtered)}")
+st.write(f"İptal sayısı: {iptal_sayisi}")
+st.write(f"İade sayısı: {iade_sayisi}")
+# İptal durumlarını manuel kontrol edin
+st.dataframe(df_filtered["siparis_satir_durumu"].unique())
+# İadelerin kaç tanesi gerçekten eşleşiyor görselleştirin
+matched_returns = df_filtered[df_filtered["key"].isin(iade_df["key"])]  # Kapatılan köşeli parantez eklendi
+st.write(f"Eşleşen iade sayısı: {len(matched_returns)}")
+# Aktif filtreleri görüntüleyin
+st.write("Aktif filtreler:", {
+    "Tarih Aralığı": tarih_aralik if filtre_tipi == "Tarih Aralığı" else donem,
+    "Magazalar": secilen_magazalar,
+    "Pazaryerleri": secilen_pazaryerleri
+})
+# Tekrar eden sipariş numaralarını bulma
+tekrar_eden_siparisler = df['siparis_no'].value_counts()
+tekrar_eden_siparisler = tekrar_eden_siparisler[tekrar_eden_siparisler > 1]
+
+if not tekrar_eden_siparisler.empty:
+    st.warning(f"⚠️ {len(tekrar_eden_siparisler)} adet sipariş numarası tekrar ediyor!")
+
+    # Detaylı tablo oluştur
+    st.subheader("Tekrar Eden Siparişler")
+    st.dataframe(tekrar_eden_siparisler.reset_index().rename(columns={
+        'index': 'Sipariş No',
+        'siparis_no': 'Tekrar Sayısı'
+    }))
+
+    # Örnek detayları göster (ilk 5 tekrar eden sipariş)
+    st.subheader("Örnek Tekrar Eden Sipariş Detayları")
+    ornek_siparis_no = tekrar_eden_siparisler.index[0]
+    st.dataframe(df[df['siparis_no'] == ornek_siparis_no])
+else:
+    st.success("✅ Hiçbir sipariş numarası tekrar etmiyor!")
