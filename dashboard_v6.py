@@ -1331,38 +1331,3 @@ else:
 #         use_container_width=True
 #     )
 
-st.write(f"Ham veri satır sayısı: {len(df)}")
-st.write(f"Filtrelenmiş veri satır sayısı: {len(df_filtered)}")
-st.write(f"İptal sayısı: {iptal_sayisi}")
-st.write(f"İade sayısı: {iade_sayisi}")
-# İptal durumlarını manuel kontrol edin
-st.dataframe(df_filtered["siparis_satir_durumu"].unique())
-# İadelerin kaç tanesi gerçekten eşleşiyor görselleştirin
-matched_returns = df_filtered[df_filtered["key"].isin(iade_df["key"])]  # Kapatılan köşeli parantez eklendi
-st.write(f"Eşleşen iade sayısı: {len(matched_returns)}")
-# Aktif filtreleri görüntüleyin
-st.write("Aktif filtreler:", {
-    "Tarih Aralığı": tarih_aralik if filtre_tipi == "Tarih Aralığı" else donem,
-    "Magazalar": secilen_magazalar,
-    "Pazaryerleri": secilen_pazaryerleri
-})
-# Tekrar eden sipariş numaralarını bulma
-tekrar_eden_siparisler = df['siparis_no'].value_counts()
-tekrar_eden_siparisler = tekrar_eden_siparisler[tekrar_eden_siparisler > 1]
-
-if not tekrar_eden_siparisler.empty:
-    st.warning(f"⚠️ {len(tekrar_eden_siparisler)} adet sipariş numarası tekrar ediyor!")
-
-    # Detaylı tablo oluştur
-    st.subheader("Tekrar Eden Siparişler")
-    st.dataframe(tekrar_eden_siparisler.reset_index().rename(columns={
-        'index': 'Sipariş No',
-        'siparis_no': 'Tekrar Sayısı'
-    }))
-
-    # Örnek detayları göster (ilk 5 tekrar eden sipariş)
-    st.subheader("Örnek Tekrar Eden Sipariş Detayları")
-    ornek_siparis_no = tekrar_eden_siparisler.index[0]
-    st.dataframe(df[df['siparis_no'] == ornek_siparis_no])
-else:
-    st.success("✅ Hiçbir sipariş numarası tekrar etmiyor!")
