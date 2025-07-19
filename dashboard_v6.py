@@ -374,7 +374,7 @@ def plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25, tota
 def cached_plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25, total_slices=30):
     return plot_gauge_gradient(value, label, base_colors, global_max, adet_max, total_slices)
 
-df = pd.read_excel("Haziran_Siparisler.xlsx")
+df = pd.read_excel("Haziran_Siparisler2.xlsx")
 df["siparis_tarihi"] = pd.to_datetime(df["Sip. Tarihi"], format="%d.%m.%Y %H:%M", errors="coerce")
 # ✅ ŞU SATIRI EKLE (manuel düzeltme)
 
@@ -405,7 +405,7 @@ df["magaza_normalized"] = df["magaza"].apply(normalize_magaza)
 
 # -------------------- İADELER --------------------
 # Sütun isimlerini normalize edelim
-iade_df = pd.read_excel("Haziran_Iadeler.xlsx")
+iade_df = pd.read_excel("Haziran_Iadeler2.xlsx")
 
 
 iade_df.columns = [
@@ -496,7 +496,11 @@ df.columns = [c.strip().lower().replace(" ", "_").replace("-", "_")
 
 # Tarih Filtresi
 if filtre_tipi == "Tarih Aralığı":
-    baslangic, bitis = tarih_aralik
+    if not tarih_aralik or len(tarih_aralik) < 2:
+        st.warning("📅 Lütfen geçerli bir tarih aralığı seçiniz.")
+        st.stop()
+    else:
+        baslangic, bitis = tarih_aralik
     df_filtered = df[
         (df["siparis_tarihi"].dt.date >= baslangic) &
         (df["siparis_tarihi"].dt.date <= bitis)
@@ -1063,6 +1067,183 @@ fig.update_layout(
     ),
 )
 st.plotly_chart(fig, use_container_width=True)
+# -------------------- PİVOT TABLO --------------------
+st.markdown("### 🏷️ Mağaza & Pazaryeri Satış Özeti")
+
+# Create pivot table with the structure from your image
+pivot_data = []
+
+# Define the store and marketplace structure from your image
+# store_structure = {
+#     "AIDA HOME": ["PrestaShop", "Trendyol"],
+#     "Depoba": ["Amazon", "Trendyol"],
+#     "ILYAKİ": ["HepsiBurada", "Trendyol"],
+#     "LATTE": ["Amazon", "Trendyol"],
+#     "Sporsuit": ["Amazon", "PraPazar", "PrestaShop", "Trendyol"]
+# }
+
+# Dinamik olarak mevcut mağaza ve pazaryeri kombinasyonlarını al
+filtered_stores = df_filtered["magaza_normalized"].unique()
+
+pivot_data = []
+
+for store in filtered_stores:
+    store_df = df_filtered[df_filtered["magaza_normalized"] == store]
+    filtered_marketplaces = store_df["pazaryeri"].unique()
+
+    for i, marketplace in enumerate(filtered_marketplaces):
+        filtered = store_df[store_df["pazaryeri"] == marketplace]
+        komisyon = filtered["satr_komisyon"].sum()
+        net_kar = filtered["kar"].sum()
+
+        pivot_data.append({
+            "Mağaza": store.upper() if i == 0 else "",
+            "Pazaryeri": marketplace,
+            "Komisyon": f"{komisyon:,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", "."),
+            "Net Kar": f"{net_kar:,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", ".")
+        })
+
+    # Mağaza toplamı
+    total_komisyon = store_df["satr_komisyon"].sum()
+    total_net_kar = store_df["kar"].sum()
+
+    pivot_data.append({
+        "Mağaza": f"Toplam {store.upper()}",
+        "Pazaryeri": "",
+        "Komisyon": f"{total_komisyon:,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", "."),
+        "Net Kar": f"{total_net_kar:,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", ".")
+    })
+
+grand_total_komisyon = df_filtered["satr_komisyon"].sum()
+grand_total_net_kar = df_filtered["kar"].sum()
+pivot_data.append({
+    "Mağaza": "Genel Toplam",
+    "Pazaryeri": "",
+    "Komisyon": f"{grand_total_komisyon:,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", "."),
+    "Net Kar": f"{grand_total_net_kar:,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", ".")
+})
+
+# Convert to DataFrame
+pivot_df = pd.DataFrame(pivot_data)
+
+# Display the pivot table with custom styling
+# st.dataframe(
+#     pivot_df,
+#     use_container_width=True,
+#     hide_index=True,
+#     column_config={
+#         "Mağaza": st.column_config.Column(width="medium"),
+#         "Pazaryeri": st.column_config.Column(width="medium"),
+#         "Komisyon": st.column_config.Column(width="medium"),
+#         "Net Kar": st.column_config.Column(width="medium")
+#     }
+# )
+# HTML tabloyu oluştur
+pivot_html = pivot_df.to_html(index=False, escape=False, border=0, classes="custom-pivot-table")
+st.markdown("""
+<style>
+.custom-pivot-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 15px;
+    font-family: 'Segoe UI', sans-serif;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+}
+
+/* BAŞLIKLAR */
+.custom-pivot-table th {
+    background: linear-gradient(to right, #002f4b, #005c97);
+    color: white;
+    padding: 14px;
+    font-weight: 700;
+    font-size: 15px;
+    text-align: center;
+    border-bottom: 3px solid #00c3ff;
+}
+
+/* HÜCRELER */
+.custom-pivot-table td {
+    background-color: #0f1626;
+    color: #ecf0f1;
+    padding: 12px 10px;
+    border-bottom: 1px solid #2f3640;
+    font-size: 14px;
+    text-align: center;
+    transition: background-color 0.2s ease;
+}
+
+/* ALTERNATİF SATIR */
+.custom-pivot-table tr:nth-child(even) td {
+    background-color: #10192e;
+}
+
+/* HOVER */
+.custom-pivot-table tr:hover td {
+    background-color: #1d2d44;
+}
+
+/* ₺ SÜTUNLARI */
+.custom-pivot-table td:nth-child(3),
+.custom-pivot-table td:nth-child(4) {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+    font-variant-numeric: tabular-nums;
+}
+
+/* MAĞAZA SATIRI (ilk satırda) */
+.custom-pivot-table td:first-child:not(:empty):not(:has(+ td:not(:empty))) {
+    font-weight: bold;
+    background-color: #1c3147;
+    color: #00d2ff;
+    font-size: 16px;
+    text-align: left;
+    border-left: 5px solid #00f0ff;
+    border-top: 2px solid #00c3ff;
+}
+
+/* TOPLAM SATIRLAR */
+.custom-pivot-table td:first-child:contains("Toplam") {
+    background: linear-gradient(to right, #00334e, #002637);
+    color: #7fdbff !important;
+    font-weight: bold;
+    font-size: 15px;
+    text-align: left;
+    border-left: 5px solid #00ffcc;
+    box-shadow: inset 2px 0 0 #00ffcc;
+}
+
+/* GENEL TOPLAM */
+.custom-pivot-table td:first-child:contains("Genel Toplam") {
+    background-color: #ffe600 !important;
+    color: #000000 !important;
+    font-weight: 900;
+    font-size: 16px;
+    border-left: 6px solid #ff8800;
+    text-align: left;
+    box-shadow: inset 4px 0 0 #ff8800;
+}
+
+/* GENEL TOPLAM TÜM SATIR */
+.custom-pivot-table tr td:first-child:contains("Genel Toplam") ~ td {
+    background-color: #fff9c4 !important;
+    color: #111 !important;
+    font-weight: bold;
+}
+
+.custom-pivot-table tr td:empty {
+    background-color: #0f1626;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+
+# HTML tabloyu göster
+st.markdown(pivot_html, unsafe_allow_html=True)
+
 # 📊 Mağaza - Pazaryeri Özeti
 # st.markdown("### 🧾 Mağaza & Pazaryeri Satış Özeti")
 
@@ -1292,26 +1473,26 @@ grup = df_filtered.groupby("pazaryeri").agg({
 
 # --------------------
 # 📦 Ürün Stok Durumu
-urunler_df = pd.read_excel("Urunler.xlsx")
-urunler_df.columns = [
-    c.strip().lower()
-    .replace(" ", "_")
-    .replace("-", "_")
-    .replace("ç", "c").replace("ş", "s").replace("ğ", "g")
-    .replace("ü", "u").replace("ı", "i").replace("ö", "o")
-    for c in urunler_df.columns
-]
-
-if "Stok" in urunler_df.columns:
-    urunler_df["stok"] = urunler_df["Stok"].astype(str).str.replace(",", ".").str.strip()
-    urunler_df["stok"] = pd.to_numeric(urunler_df["stok"], errors="coerce").fillna(0)
-
-    stokta_olmayan_sayi = (urunler_df["stok"] <= 0).sum()
-    kritik_stok_sayi = (urunler_df["stok"] <= 1).sum()
-else:
-    # st.warning("⚠️ 'Stok' kolonu bulunamadı, stok kontrolü atlandı.")
-    stokta_olmayan_sayi = 0
-    kritik_stok_sayi = 0
+# urunler_df = pd.read_excel("Urunler.xlsx")
+# urunler_df.columns = [
+#     c.strip().lower()
+#     .replace(" ", "_")
+#     .replace("-", "_")
+#     .replace("ç", "c").replace("ş", "s").replace("ğ", "g")
+#     .replace("ü", "u").replace("ı", "i").replace("ö", "o")
+#     for c in urunler_df.columns
+# ]
+#
+# if "Stok" in urunler_df.columns:
+#     urunler_df["stok"] = urunler_df["Stok"].astype(str).str.replace(",", ".").str.strip()
+#     urunler_df["stok"] = pd.to_numeric(urunler_df["stok"], errors="coerce").fillna(0)
+#
+#     stokta_olmayan_sayi = (urunler_df["stok"] <= 0).sum()
+#     kritik_stok_sayi = (urunler_df["stok"] <= 1).sum()
+# else:
+#     # st.warning("⚠️ 'Stok' kolonu bulunamadı, stok kontrolü atlandı.")
+#     stokta_olmayan_sayi = 0
+#     kritik_stok_sayi = 0
 
 # 🎯 Stok durumu metriklerini renkli yuvarlak gösterge ile göster
 # st.markdown("### 📦 Stok Durumu Özeti")
@@ -1330,4 +1511,3 @@ else:
 #         plot_gauge_gradient(kritik_stok_sayi, "⚠️ Kritik Stok (<=1)", stok_colors, stok_max, adet_max=stok_max),
 #         use_container_width=True
 #     )
-
