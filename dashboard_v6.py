@@ -374,7 +374,7 @@ def plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25, tota
 def cached_plot_gauge_gradient(value, label, base_colors, global_max, adet_max=25, total_slices=30):
     return plot_gauge_gradient(value, label, base_colors, global_max, adet_max, total_slices)
 
-df = pd.read_excel("Haziran_Siparisler2.xlsx")
+df = pd.read_excel("Temmuz_Siparisler.xlsx")
 df["siparis_tarihi"] = pd.to_datetime(df["Sip. Tarihi"], format="%d.%m.%Y %H:%M", errors="coerce")
 # ✅ ŞU SATIRI EKLE (manuel düzeltme)
 
@@ -405,7 +405,7 @@ df["magaza_normalized"] = df["magaza"].apply(normalize_magaza)
 
 # -------------------- İADELER --------------------
 # Sütun isimlerini normalize edelim
-iade_df = pd.read_excel("Haziran_Iadeler2.xlsx")
+iade_df = pd.read_excel("Temmuz_Iadeler.xlsx")
 
 
 iade_df.columns = [
